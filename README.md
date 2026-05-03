@@ -13,6 +13,8 @@ Phase 1 is only the foundation:
 - OSM-compatible tile layer for development
 - route panel placeholder
 - visible app version
+- top-level `VERSION` file
+- `build.js` for the installable/deployable build
 - unit test setup
 - Playwright smoke test setup
 - GitHub Actions check workflow
@@ -55,6 +57,25 @@ Run the Playwright smoke test:
 npx playwright install chromium
 npm run test:e2e
 ```
+
+## Build and version
+
+`VERSION` is the source of truth for the app version.
+
+`build.js` reads `VERSION`, writes `src/version.js`, runs the Vite build, then writes build metadata to:
+
+```text
+dist/build-info.json
+```
+
+Useful commands:
+
+```sh
+npm run version:sync
+npm run build
+```
+
+The app imports the generated `src/version.js` file so the displayed version stays tied to `VERSION`.
 
 ## Phone testing
 

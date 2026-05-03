@@ -45,11 +45,11 @@ Frank helps with:
 
 ### Mira
 
-Miri is Mike's Codex agent in VSCodium.
+Mira is Mike's Codex agent in VSCodium.
 
 Pronouns: they/them.
 
-Miri may work directly in the repo and should update this file or `SESSION.md` when they make decisions, change direction, or leave useful context for the next session.
+Mira may work directly in the repo and should update this file or `SESSION.md` when they make decisions, change direction, or leave useful context for the next session.
 
 ## Working style
 
@@ -62,6 +62,7 @@ Prefer:
 - Tests for route model/actions/import/export behavior
 - Playwright smoke tests for app behavior
 - A clean local dev loop
+- A clear build path for the app artifact
 
 Avoid:
 
@@ -105,6 +106,7 @@ Early structure should keep these concerns separate:
 - Import/export
 - UI rendering
 - Tests/fixtures
+- Build/version plumbing
 
 Potential future adapter seams:
 
@@ -140,6 +142,19 @@ npm run build
 npm run test:e2e
 ```
 
+## Build/version requirements
+
+`VERSION` is the app version source of truth.
+
+`build.js` is the repo-level build entry point. It should:
+
+- read `VERSION`
+- sync the app-facing version module
+- run the Vite build
+- write build metadata under `dist/`
+
+Do not add hidden build steps. If the installed/deployed artifact needs something, it should happen through `npm run build`.
+
 ## Update/release hygiene
 
 Keep update behavior boring and visible.
@@ -160,6 +175,9 @@ Requirements:
 - `CHANGELOG.md`: release history
 - `AGENTS.md`: persistent agent/project coordination notes
 - `SESSION.md`: volatile session backup and current working context
+- `docs/build-and-version.md`: build and version behavior
+- `docs/development-workflow.md`: branch/dev workflow
+- `docs/release-process.md`: release checklist
 
 ## When leaving work for another agent
 
