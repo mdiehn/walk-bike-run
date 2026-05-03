@@ -19,9 +19,12 @@ The app currently:
 - shows straight-line route distance
 - supports a loop-back-to-start toggle
 - can fit the map to the current route
+- saves routes to a local browser route library
+- loads, duplicates, and deletes saved local routes
+- keeps saved route order stable when routes are re-saved
 - has unit and Playwright smoke tests
 
-It does not yet have save/load, GPX, road/path routing providers, GPS recording, or PWA caching.
+It does not yet have GPX, road/path routing providers, GPS recording, account sync, or PWA caching.
 
 ## Setup
 
@@ -65,6 +68,17 @@ For browser smoke tests:
 npx playwright install chromium
 npm run test:e2e
 ```
+
+## Route library
+
+Routes are saved in browser `localStorage` for now. This is intentionally local-only and simple. Saved routes currently use `schemaVersion: 1` and are normalized through `src/route-library.js`.
+
+That means:
+
+- saved routes stay in the browser/profile/device where they were created
+- clearing site data can delete saved routes
+- there is no account sync yet
+- export/import comes later so routes can be backed up and moved around
 
 ## Version
 

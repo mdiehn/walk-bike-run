@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Keep saved route order stable when re-saving existing routes.
+- Add `schemaVersion` to saved route library entries.
+- Place duplicated routes next to their source route.
+- Document future library sorting and usage-history ideas.
+
+- Add a local browser route library.
+- Add save, save-as-copy, load, duplicate, delete, and new-route actions.
+- Track whether the current route has unsaved changes.
+- Save route library entries to `localStorage`.
+- Add route library helpers and unit tests.
+- Update Playwright tests for the local library flow.
+
 - Start Phase 2 route editor features.
 - Replace the hello-world test route with real route editing basics.
 - Add route name and activity controls.

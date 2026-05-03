@@ -241,6 +241,74 @@ select:focus {
   gap: 0.5rem;
 }
 
+
+.save-status {
+  background: #fff8c5;
+  border: 1px solid #eac54f;
+  border-radius: 0.8rem;
+  color: #6e4f00;
+  font-size: 0.9rem;
+  font-weight: 800;
+  margin: 0.75rem 0 0.35rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.saved-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.saved-route-list li {
+  background: #f6f8fa;
+  border-radius: 0.8rem;
+  padding: 0.6rem;
+}
+
+.saved-route-row {
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.saved-route-row.is-active {
+  border-color: #1f6feb;
+  background: #eef6ff;
+}
+
+.saved-route-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.saved-route-main span {
+  color: #57606a;
+  font-size: 0.85rem;
+}
+
+.active-route-label {
+  align-self: flex-start;
+  background: #1f6feb;
+  border-radius: 999px;
+  color: white !important;
+  font-size: 0.72rem !important;
+  font-weight: 800;
+  padding: 0.15rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.saved-route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
 .point-list {
   display: flex;
   flex-direction: column;
@@ -379,12 +447,14 @@ select:focus {
     width: 100%;
   }
 
-  .point-actions {
+  .point-actions,
+  .saved-route-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
 
-  .point-actions .danger {
+  .point-actions .danger,
+  .saved-route-actions .danger {
     grid-column: 1 / -1;
   }
 }
