@@ -1,7 +1,7 @@
-import { createRoute, totalDistanceMeters } from './route-model.js';
+import { createRoute, totalDistanceMeters } from "./route-model.js";
 
 export const ROUTE_LIBRARY_SCHEMA_VERSION = 1;
-export const ROUTE_LIBRARY_STORAGE_KEY = 'walk-bike-run.routeLibrary.v1';
+export const ROUTE_LIBRARY_STORAGE_KEY = "walk-bike-run.routeLibrary.v1";
 
 export function loadRouteLibrary(storage = globalThis.localStorage) {
   if (!storage) return [];
@@ -20,10 +20,16 @@ export function loadRouteLibrary(storage = globalThis.localStorage) {
 
 export function saveRouteLibrary(library, storage = globalThis.localStorage) {
   if (!storage) return;
-  storage.setItem(ROUTE_LIBRARY_STORAGE_KEY, JSON.stringify(library.map(normalizeSavedRoute).filter(Boolean)));
+  storage.setItem(
+    ROUTE_LIBRARY_STORAGE_KEY,
+    JSON.stringify(library.map(normalizeSavedRoute).filter(Boolean)),
+  );
 }
 
-export function createSavedRoute(route, { id = createId(), now = new Date().toISOString() } = {}) {
+export function createSavedRoute(
+  route,
+  { id = createId(), now = new Date().toISOString() } = {},
+) {
   const cleanRoute = createRoute(route);
 
   return {
@@ -51,9 +57,14 @@ export function savedRouteToRoute(savedRoute) {
   });
 }
 
-export function upsertSavedRoute(library, route, { id, now = new Date().toISOString() } = {}) {
+export function upsertSavedRoute(
+  library,
+  route,
+  { id, now = new Date().toISOString() } = {},
+) {
   const existingIndex = id ? library.findIndex((entry) => entry.id === id) : -1;
-  const existing = existingIndex >= 0 ? normalizeSavedRoute(library[existingIndex]) : null;
+  const existing =
+    existingIndex >= 0 ? normalizeSavedRoute(library[existingIndex]) : null;
   const savedRoute = createSavedRoute(route, {
     id: existing?.id ?? id ?? createId(),
     now,
@@ -73,7 +84,11 @@ export function upsertSavedRoute(library, route, { id, now = new Date().toISOStr
   return [savedRoute, ...library].map(normalizeSavedRoute).filter(Boolean);
 }
 
-export function duplicateSavedRoute(library, savedRouteId, { now = new Date().toISOString() } = {}) {
+export function duplicateSavedRoute(
+  library,
+  savedRouteId,
+  { now = new Date().toISOString() } = {},
+) {
   const sourceIndex = library.findIndex((entry) => entry.id === savedRouteId);
   if (sourceIndex === -1) return library;
 
@@ -93,20 +108,25 @@ export function duplicateSavedRoute(library, savedRouteId, { now = new Date().to
 }
 
 export function deleteSavedRoute(library, savedRouteId) {
-  return library.filter((entry) => entry.id !== savedRouteId).map(normalizeSavedRoute).filter(Boolean);
+  return library
+    .filter((entry) => entry.id !== savedRouteId)
+    .map(normalizeSavedRoute)
+    .filter(Boolean);
 }
 
 export function getSavedRoute(library, savedRouteId) {
   return library.find((entry) => entry.id === savedRouteId) ?? null;
 }
 
-function normalizeSavedRoute(savedRoute) {
-  if (!savedRoute || typeof savedRoute !== 'object') return null;
+export function normalizeSavedRoute(savedRoute) {
+  if (!savedRoute || typeof savedRoute !== "object") return null;
 
   try {
     const route = createRoute(savedRoute);
     const createdAt = normalizeDate(savedRoute.createdAt);
-    const updatedAt = normalizeDate(savedRoute.updatedAt ?? savedRoute.createdAt);
+    const updatedAt = normalizeDate(
+      savedRoute.updatedAt ?? savedRoute.createdAt,
+    );
 
     return {
       schemaVersion: ROUTE_LIBRARY_SCHEMA_VERSION,

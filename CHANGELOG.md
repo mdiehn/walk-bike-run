@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add app JSON export/import for saved route library backups.
+- Add backup validation and route backup unit tests.
+- Bump development version to `0.2.0-dev`.
+
 - Keep saved route order stable when re-saving existing routes.
 - Add `schemaVersion` to saved route library entries.
 - Place duplicated routes next to their source route.

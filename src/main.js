@@ -1,6 +1,6 @@
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import './style.css';
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "./style.css";
 
 import {
   addPoint,
@@ -13,7 +13,7 @@ import {
   totalDistanceMeters,
   updatePoint,
   updateRoute,
-} from './route-model.js';
+} from "./route-model.js";
 import {
   createSavedRoute,
   deleteSavedRoute,
@@ -23,13 +23,17 @@ import {
   saveRouteLibrary,
   savedRouteToRoute,
   upsertSavedRoute,
-} from './route-library.js';
-import { APP_VERSION } from './version.js';
+} from "./route-library.js";
+import {
+  parseRouteLibraryBackup,
+  serializeRouteLibraryBackup,
+} from "./route-backup.js";
+import { APP_VERSION } from "./version.js";
 
 const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
 
-let route = createRoute({ name: 'New route', activityType: 'walk' });
+let route = createRoute({ name: "New route", activityType: "walk" });
 let routeLibrary = loadRouteLibrary();
 let activeSavedRouteId = null;
 let routeDirty = false;
@@ -37,7 +41,7 @@ let map;
 let pointLayer;
 let lineLayer;
 
-const app = document.querySelector('#app');
+const app = document.querySelector("#app");
 
 app.innerHTML = `
   <div class="app-shell">
@@ -118,6 +122,16 @@ app.innerHTML = `
         </section>
 
         <section class="panel-section">
+          <h2>Library backup</h2>
+          <div class="button-row">
+            <button id="exportLibrary" type="button" class="secondary">Export JSON</button>
+            <button id="importLibraryButton" type="button" class="secondary">Import JSON</button>
+            <input id="importLibraryFile" class="sr-only" type="file" accept="application/json,.json" />
+          </div>
+          <p id="backupStatus" class="hint-text" data-testid="backup-status">Back up saved routes as app JSON.</p>
+        </section>
+
+        <section class="panel-section">
           <h2>Route list</h2>
           <ol id="pointList" class="point-list" data-testid="point-list"></ol>
         </section>
@@ -127,43 +141,51 @@ app.innerHTML = `
 `;
 
 const elements = {
-  mapStatus: document.querySelector('#mapStatus'),
-  inputStatus: document.querySelector('#inputStatus'),
-  viewportStatus: document.querySelector('#viewportStatus'),
-  pointCount: document.querySelector('#pointCount'),
-  distanceText: document.querySelector('#distanceText'),
-  saveStatus: document.querySelector('#saveStatus'),
-  routeName: document.querySelector('#routeName'),
-  activityType: document.querySelector('#activityType'),
-  loopToggle: document.querySelector('#loopToggle'),
-  addCenterPoint: document.querySelector('#addCenterPoint'),
-  fitRoute: document.querySelector('#fitRoute'),
-  clearPoints: document.querySelector('#clearPoints'),
-  saveRoute: document.querySelector('#saveRoute'),
-  saveRouteCopy: document.querySelector('#saveRouteCopy'),
-  newRoute: document.querySelector('#newRoute'),
-  savedRouteList: document.querySelector('#savedRouteList'),
-  pointList: document.querySelector('#pointList'),
+  mapStatus: document.querySelector("#mapStatus"),
+  inputStatus: document.querySelector("#inputStatus"),
+  viewportStatus: document.querySelector("#viewportStatus"),
+  pointCount: document.querySelector("#pointCount"),
+  distanceText: document.querySelector("#distanceText"),
+  saveStatus: document.querySelector("#saveStatus"),
+  routeName: document.querySelector("#routeName"),
+  activityType: document.querySelector("#activityType"),
+  loopToggle: document.querySelector("#loopToggle"),
+  addCenterPoint: document.querySelector("#addCenterPoint"),
+  fitRoute: document.querySelector("#fitRoute"),
+  clearPoints: document.querySelector("#clearPoints"),
+  saveRoute: document.querySelector("#saveRoute"),
+  saveRouteCopy: document.querySelector("#saveRouteCopy"),
+  newRoute: document.querySelector("#newRoute"),
+  exportLibrary: document.querySelector("#exportLibrary"),
+  importLibraryButton: document.querySelector("#importLibraryButton"),
+  importLibraryFile: document.querySelector("#importLibraryFile"),
+  backupStatus: document.querySelector("#backupStatus"),
+  savedRouteList: document.querySelector("#savedRouteList"),
+  pointList: document.querySelector("#pointList"),
 };
 
 function initMap() {
-  map = L.map('map', {
+  map = L.map("map", {
     zoomControl: true,
   }).setView(INITIAL_CENTER, INITIAL_ZOOM);
 
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors',
+    attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
 
   lineLayer = L.layerGroup().addTo(map);
   pointLayer = L.layerGroup().addTo(map);
 
-  map.on('click', (event) => {
-    addRoutePoint(event.latlng.lat, event.latlng.lng, `Map point ${route.points.length + 1}`);
+  map.on("click", (event) => {
+    addRoutePoint(
+      event.latlng.lat,
+      event.latlng.lng,
+      `Map point ${route.points.length + 1}`,
+    );
   });
 
-  elements.mapStatus.textContent = 'Ready';
+  elements.mapStatus.textContent = "Ready";
 }
 
 function addRoutePoint(lat, lng, name) {
@@ -171,7 +193,10 @@ function addRoutePoint(lat, lng, name) {
   markRouteDirty();
 }
 
-function setRoute(nextRoute, { savedRouteId = activeSavedRouteId, dirty = true } = {}) {
+function setRoute(
+  nextRoute,
+  { savedRouteId = activeSavedRouteId, dirty = true } = {},
+) {
   route = nextRoute;
   activeSavedRouteId = savedRouteId;
   routeDirty = dirty;
@@ -219,33 +244,36 @@ function renderPointList() {
             </label>
           </div>
           <div class="point-actions">
-            <button type="button" class="small-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''}>Up</button>
-            <button type="button" class="small-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="1" ${index === route.points.length - 1 ? 'disabled' : ''}>Down</button>
+            <button type="button" class="small-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="-1" ${index === 0 ? "disabled" : ""}>Up</button>
+            <button type="button" class="small-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="1" ${index === route.points.length - 1 ? "disabled" : ""}>Down</button>
             <button type="button" class="small-button danger" data-delete-point="${escapeAttr(point.id)}">Delete</button>
           </div>
         </li>
       `,
     )
-    .join('');
+    .join("");
 }
 
 function renderLibraryList() {
   if (routeLibrary.length === 0) {
-    elements.savedRouteList.innerHTML = '<li class="empty-row">No saved routes yet.</li>';
+    elements.savedRouteList.innerHTML =
+      '<li class="empty-row">No saved routes yet.</li>';
     return;
   }
 
   elements.savedRouteList.innerHTML = routeLibrary
     .map((savedRoute) => {
       const isActive = savedRoute.id === activeSavedRouteId;
-      const activeLabel = isActive ? '<span class="active-route-label">Current</span>' : '';
+      const activeLabel = isActive
+        ? '<span class="active-route-label">Current</span>'
+        : "";
 
       return `
-        <li class="saved-route-row ${isActive ? 'is-active' : ''}" data-saved-route-id="${escapeAttr(savedRoute.id)}">
+        <li class="saved-route-row ${isActive ? "is-active" : ""}" data-saved-route-id="${escapeAttr(savedRoute.id)}">
           <div class="saved-route-main">
             <strong>${escapeHtml(savedRoute.name)}</strong>
             ${activeLabel}
-            <span>${formatActivityType(savedRoute.activityType)} · ${savedRoute.points.length} point${savedRoute.points.length === 1 ? '' : 's'} · ${formatMiles(savedRoute.distanceMeters)}</span>
+            <span>${formatActivityType(savedRoute.activityType)} · ${savedRoute.points.length} point${savedRoute.points.length === 1 ? "" : "s"} · ${formatMiles(savedRoute.distanceMeters)}</span>
             <span>Updated ${formatDate(savedRoute.updatedAt)}</span>
           </div>
           <div class="saved-route-actions">
@@ -256,7 +284,7 @@ function renderLibraryList() {
         </li>
       `;
     })
-    .join('');
+    .join("");
 }
 
 function renderMapRoute() {
@@ -266,9 +294,10 @@ function renderMapRoute() {
   const latLngs = route.points.map((point) => [point.lat, point.lng]);
 
   if (latLngs.length > 1) {
-    const linePoints = route.loop && latLngs.length > 2 ? [...latLngs, latLngs[0]] : latLngs;
+    const linePoints =
+      route.loop && latLngs.length > 2 ? [...latLngs, latLngs[0]] : latLngs;
     L.polyline(linePoints, {
-      className: 'route-line',
+      className: "route-line",
       weight: 4,
     }).addTo(lineLayer);
   }
@@ -277,7 +306,7 @@ function renderMapRoute() {
     const marker = L.marker([point.lat, point.lng], {
       draggable: true,
       icon: L.divIcon({
-        className: 'route-marker-shell',
+        className: "route-marker-shell",
         html: `<div class="route-marker">${index + 1}</div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
@@ -285,9 +314,12 @@ function renderMapRoute() {
       title: point.name,
     });
 
-    marker.on('dragend', (event) => {
+    marker.on("dragend", (event) => {
       const latLng = event.target.getLatLng();
-      route = updatePoint(route, point.id, { lat: latLng.lat, lng: latLng.lng });
+      route = updatePoint(route, point.id, {
+        lat: latLng.lat,
+        lng: latLng.lng,
+      });
       markRouteDirty();
     });
 
@@ -305,7 +337,9 @@ function fitRouteToMap() {
     return;
   }
 
-  const bounds = L.latLngBounds(route.points.map((point) => [point.lat, point.lng]));
+  const bounds = L.latLngBounds(
+    route.points.map((point) => [point.lat, point.lng]),
+  );
   map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
 }
 
@@ -314,15 +348,23 @@ function saveCurrentRoute({ asCopy = false } = {}) {
   let savedRoute;
 
   if (asCopy || !activeSavedRouteId) {
-    const routeToSave = asCopy ? updateRoute(route, { name: `${route.name} copy` }) : route;
+    const routeToSave = asCopy
+      ? updateRoute(route, { name: `${route.name} copy` })
+      : route;
     savedRoute = createSavedRoute(routeToSave, { now });
-    routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, { id: savedRoute.id, now });
+    routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, {
+      id: savedRoute.id,
+      now,
+    });
     route = savedRouteToRoute(savedRoute);
   } else {
     const existing = getSavedRoute(routeLibrary, activeSavedRouteId);
     savedRoute = createSavedRoute(route, { id: activeSavedRouteId, now });
     if (existing) savedRoute.createdAt = existing.createdAt;
-    routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, { id: savedRoute.id, now });
+    routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, {
+      id: savedRoute.id,
+      now,
+    });
   }
 
   activeSavedRouteId = savedRoute.id;
@@ -356,10 +398,59 @@ function removeSavedRoute(savedRouteId) {
 }
 
 function startNewRoute() {
-  setRoute(createRoute({ name: 'New route', activityType: route.activityType }), {
-    savedRouteId: null,
-    dirty: false,
+  setRoute(
+    createRoute({ name: "New route", activityType: route.activityType }),
+    {
+      savedRouteId: null,
+      dirty: false,
+    },
+  );
+}
+
+function exportLibraryJson() {
+  const json = serializeRouteLibraryBackup(routeLibrary, {
+    appVersion: APP_VERSION,
   });
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const dateStamp = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `walk-bike-run-routes-${dateStamp}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  elements.backupStatus.textContent = `Exported ${routeLibrary.length} saved route${routeLibrary.length === 1 ? "" : "s"}.`;
+}
+
+async function importLibraryJson(file) {
+  if (!file) return;
+
+  try {
+    const importedLibrary = parseRouteLibraryBackup(await file.text());
+    const shouldImport =
+      routeLibrary.length === 0 ||
+      window.confirm(
+        `Import ${importedLibrary.length} saved route${importedLibrary.length === 1 ? "" : "s"}? This will replace your current route library.`,
+      );
+
+    if (!shouldImport) {
+      elements.backupStatus.textContent = "Import canceled.";
+      return;
+    }
+
+    routeLibrary = importedLibrary;
+    activeSavedRouteId = null;
+    routeDirty = true;
+    persistLibrary();
+    renderRoute();
+    elements.backupStatus.textContent = `Imported ${routeLibrary.length} saved route${routeLibrary.length === 1 ? "" : "s"}.`;
+  } catch (error) {
+    elements.backupStatus.textContent = error.message;
+  }
 }
 
 function persistLibrary() {
@@ -367,13 +458,20 @@ function persistLibrary() {
 }
 
 function getSaveStatusText() {
-  if (!activeSavedRouteId) return routeDirty ? 'Unsaved route changes' : 'Unsaved route';
-  return routeDirty ? 'Saved route has unsaved changes' : 'Saved in route library';
+  if (!activeSavedRouteId)
+    return routeDirty ? "Unsaved route changes" : "Unsaved route";
+  return routeDirty
+    ? "Saved route has unsaved changes"
+    : "Saved in route library";
 }
 
 function updateDeviceStatus() {
-  const touchCapable = navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
-  elements.inputStatus.textContent = touchCapable ? 'Touch capable' : 'Mouse/trackpad';
+  const touchCapable =
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(pointer: coarse)").matches;
+  elements.inputStatus.textContent = touchCapable
+    ? "Touch capable"
+    : "Mouse/trackpad";
   elements.viewportStatus.textContent = `${window.innerWidth}x${window.innerHeight}`;
 }
 
@@ -387,98 +485,112 @@ function formatActivityType(activityType) {
 
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'short',
-    timeStyle: 'short',
+    dateStyle: "short",
+    timeStyle: "short",
   }).format(new Date(value));
 }
 
 function escapeHtml(value) {
   return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function escapeAttr(value) {
   return escapeHtml(value);
 }
 
-elements.routeName.addEventListener('change', (event) => {
+elements.routeName.addEventListener("change", (event) => {
   route = updateRoute(route, { name: event.target.value });
   markRouteDirty();
 });
 
-elements.activityType.addEventListener('change', (event) => {
+elements.activityType.addEventListener("change", (event) => {
   route = updateRoute(route, { activityType: event.target.value });
   markRouteDirty();
 });
 
-elements.addCenterPoint.addEventListener('click', () => {
+elements.addCenterPoint.addEventListener("click", () => {
   const center = map.getCenter();
   addRoutePoint(center.lat, center.lng, `Map point ${route.points.length + 1}`);
 });
 
-elements.fitRoute.addEventListener('click', fitRouteToMap);
+elements.fitRoute.addEventListener("click", fitRouteToMap);
 
-elements.clearPoints.addEventListener('click', () => {
+elements.clearPoints.addEventListener("click", () => {
   route = clearPoints(route);
   markRouteDirty();
 });
 
-elements.loopToggle.addEventListener('change', (event) => {
+elements.loopToggle.addEventListener("change", (event) => {
   route = setLoop(route, event.target.checked);
   markRouteDirty();
 });
 
-elements.saveRoute.addEventListener('click', () => saveCurrentRoute());
-elements.saveRouteCopy.addEventListener('click', () => saveCurrentRoute({ asCopy: true }));
-elements.newRoute.addEventListener('click', startNewRoute);
+elements.saveRoute.addEventListener("click", () => saveCurrentRoute());
+elements.saveRouteCopy.addEventListener("click", () =>
+  saveCurrentRoute({ asCopy: true }),
+);
+elements.newRoute.addEventListener("click", startNewRoute);
+elements.exportLibrary.addEventListener("click", exportLibraryJson);
+elements.importLibraryButton.addEventListener("click", () =>
+  elements.importLibraryFile.click(),
+);
+elements.importLibraryFile.addEventListener("change", async (event) => {
+  await importLibraryJson(event.target.files?.[0]);
+  event.target.value = "";
+});
 
-elements.pointList.addEventListener('click', (event) => {
-  const deleteButton = event.target.closest('[data-delete-point]');
+elements.pointList.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-delete-point]");
   if (deleteButton) {
     route = deletePoint(route, deleteButton.dataset.deletePoint);
     markRouteDirty();
     return;
   }
 
-  const moveButton = event.target.closest('[data-move-point]');
+  const moveButton = event.target.closest("[data-move-point]");
   if (moveButton) {
-    route = movePoint(route, moveButton.dataset.movePoint, Number(moveButton.dataset.moveDelta));
+    route = movePoint(
+      route,
+      moveButton.dataset.movePoint,
+      Number(moveButton.dataset.moveDelta),
+    );
     markRouteDirty();
   }
 });
 
-elements.pointList.addEventListener('change', (event) => {
-  const input = event.target.closest('[data-rename-point]');
+elements.pointList.addEventListener("change", (event) => {
+  const input = event.target.closest("[data-rename-point]");
   if (!input) return;
 
   route = renamePoint(route, input.dataset.renamePoint, input.value);
   markRouteDirty();
 });
 
-elements.savedRouteList.addEventListener('click', (event) => {
-  const loadButton = event.target.closest('[data-load-route]');
+elements.savedRouteList.addEventListener("click", (event) => {
+  const loadButton = event.target.closest("[data-load-route]");
   if (loadButton) {
     loadSavedRoute(loadButton.dataset.loadRoute);
     return;
   }
 
-  const copyButton = event.target.closest('[data-copy-route]');
+  const copyButton = event.target.closest("[data-copy-route]");
   if (copyButton) {
     copySavedRoute(copyButton.dataset.copyRoute);
     return;
   }
 
-  const deleteButton = event.target.closest('[data-delete-route]');
+  const deleteButton = event.target.closest("[data-delete-route]");
   if (deleteButton) {
     removeSavedRoute(deleteButton.dataset.deleteRoute);
   }
 });
 
-window.addEventListener('resize', updateDeviceStatus);
+window.addEventListener("resize", updateDeviceStatus);
 
 initMap();
 updateDeviceStatus();

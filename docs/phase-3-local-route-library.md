@@ -40,20 +40,25 @@ The library keeps a stable display order instead of sorting by update date autom
 - Duplicated routes appear next to the source route.
 - Deleting a route does not reorder the remaining routes.
 
+## Backup/import
+
+The app now has JSON backup/restore for the saved local route library. This is app JSON, not GPX. Import currently replaces the saved library after confirmation instead of merging routes.
+
+See [library-backups.md](library-backups.md).
+
 ## Not yet
 
 - No cross-device sync.
 - No backend.
-- No import/export backup.
+- No GPX import/export.
 - No full schema migration helper beyond the current normalization logic.
 - No custom sort controls yet.
 - No usage history or best-time tracking yet.
 
 ## Next library work
 
-- Add route/library export as JSON.
-- Add route/library import from JSON.
-- Add confirmation or undo for destructive actions.
+- Add confirmation or undo for delete/clear actions.
+- Consider merge behavior for JSON import once the library UI is more mature.
 - Add route search/filter once there are enough saved routes to need it.
 - Add optional sorting by name, distance, point count, created date, updated date, last used date, or usage count.
 - Add activity history fields later, such as last used, use count, best time, and recent times.

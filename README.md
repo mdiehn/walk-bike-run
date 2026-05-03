@@ -22,6 +22,7 @@ The app currently:
 - saves routes to a local browser route library
 - loads, duplicates, and deletes saved local routes
 - keeps saved route order stable when routes are re-saved
+- exports and imports the saved route library as app JSON backups
 - has unit and Playwright smoke tests
 
 It does not yet have GPX, road/path routing providers, GPS recording, account sync, or PWA caching.
@@ -78,7 +79,16 @@ That means:
 - saved routes stay in the browser/profile/device where they were created
 - clearing site data can delete saved routes
 - there is no account sync yet
-- export/import comes later so routes can be backed up and moved around
+- use **Export JSON** to back up saved routes
+- use **Import JSON** to replace the current saved route library with a backup
+
+## Library backups
+
+The JSON export/import feature is an app backup format, not GPX. It is meant to keep saved local routes safe while the app is still young.
+
+Importing a backup replaces the current saved route library after confirmation. It does not merge routes yet.
+
+See [docs/library-backups.md](docs/library-backups.md).
 
 ## Version
 
