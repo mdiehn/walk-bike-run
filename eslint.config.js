@@ -1,28 +1,20 @@
 import js from '@eslint/js';
-
-const browserGlobals = {
-  crypto: 'readonly',
-  document: 'readonly',
-  window: 'readonly',
-};
-
-const nodeGlobals = {
-  console: 'readonly',
-  process: 'readonly',
-};
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
   {
-    files: ['src/**/*.js'],
-    languageOptions: {
-      globals: browserGlobals,
-    },
+    ignores: ['dist/', 'coverage/', 'node_modules/', 'playwright-report/', 'test-results/'],
   },
   {
-    files: ['build.js', '*.config.js'],
+    files: ['**/*.js'],
     languageOptions: {
-      globals: nodeGlobals,
+      ecmaVersion: 2024,
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
     },
   },
 ];

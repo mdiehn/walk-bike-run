@@ -1,29 +1,31 @@
 {
   "name": "walk-bike-run",
+  "version": "0.1.0-dev",
   "private": true,
   "type": "module",
+  "description": "A small personal route planner for walking, biking, and running.",
   "scripts": {
-    "version:sync": "node build.js --sync-only",
-    "dev": "node build.js --sync-only && vite --host 0.0.0.0",
+    "dev": "node build.js --sync-version && vite --host 0.0.0.0",
     "build": "node build.js",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --config vitest.config.js",
+    "test:watch": "vitest --config vitest.config.js",
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "check": "npm run lint && npm test && npm run build"
+    "format:check": "prettier --check .",
+    "version:sync": "node build.js --sync-version"
   },
   "dependencies": {
-    "@vitejs/plugin-basic-ssl": "latest",
-    "leaflet": "latest",
-    "vite": "latest"
+    "leaflet": "^1.9.4"
   },
   "devDependencies": {
-    "@eslint/js": "latest",
-    "@playwright/test": "latest",
-    "eslint": "latest",
-    "prettier": "latest",
-    "vitest": "latest"
+    "@eslint/js": "^9.25.1",
+    "@playwright/test": "^1.52.0",
+    "eslint": "^9.25.1",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "vite": "^6.3.4",
+    "vitest": "^3.1.2"
   }
 }

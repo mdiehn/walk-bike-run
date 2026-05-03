@@ -1,49 +1,52 @@
 # Walk Bike Run
 
-A small browser webapp for personal walking, biking, and running route planning.
+Walk Bike Run is a small personal route-planning webapp for walking, biking, and running.
 
-This starts as a clean webapp inspired by the route-planning ideas from Portal Route, without IITC or Ingress-specific code.
+The first milestone is intentionally boring: a reliable dev loop, a Leaflet map, a visible version, tests, and a simple desktop/mobile hello-world screen.
 
-## Phase 1 scope
+## Current state
 
-Phase 1 is only the foundation:
+Phase 1 is the app foundation.
 
-- Vite app shell
-- Leaflet map
-- OSM-compatible tile layer for development
-- route panel placeholder
-- visible app version
-- top-level `VERSION` file
-- `build.js` for the installable/deployable build
-- unit test setup
-- Playwright smoke test setup
-- GitHub Actions check workflow
+The app currently:
 
-Not included yet:
+- starts with Vite
+- displays a Leaflet map
+- shows the app version
+- lets you click/tap the map to add test points
+- lets you add and clear a sample point from the panel
+- shows simple desktop/mobile status info
+- has unit and Playwright smoke tests
 
-- service worker
-- PWA offline caching
-- backend
-- route library
-- GPS tracking
-- GPX import/export
-- road/path routing
+It does not yet have real route planning, save/load, GPX, routing providers, GPS recording, or PWA caching.
 
-## Development
-
-Install dependencies:
+## Setup
 
 ```sh
 npm install
 ```
 
-Run the dev server:
+## Dev server
 
 ```sh
 npm run dev
 ```
 
-Run checks:
+Open the URL Vite prints, usually:
+
+```text
+http://localhost:5173/
+```
+
+For phone testing on the same LAN, use the Network URL Vite prints, often something like:
+
+```text
+http://192.168.1.50:5173/
+```
+
+The `dev` script binds to `0.0.0.0` so other devices on the LAN can reach it if your firewall allows the port.
+
+## Checks
 
 ```sh
 npm run lint
@@ -51,42 +54,31 @@ npm test
 npm run build
 ```
 
-Run the Playwright smoke test:
+`npm test` runs only the unit tests under `test/`. Playwright tests live under `e2e/` and run separately so Vitest does not try to load Playwright test files.
+
+For browser smoke tests:
 
 ```sh
 npx playwright install chromium
 npm run test:e2e
 ```
 
-## Build and version
+## Version
 
-`VERSION` is the source of truth for the app version.
-
-`build.js` reads `VERSION`, writes `src/version.js`, runs the Vite build, then writes build metadata to:
-
-```text
-dist/build-info.json
-```
-
-Useful commands:
+The top-level `VERSION` file is the source of truth.
 
 ```sh
 npm run version:sync
-npm run build
 ```
 
-The app imports the generated `src/version.js` file so the displayed version stays tied to `VERSION`.
+That writes `src/version.js` from `VERSION`.
 
-## Phone testing
+`npm run build` also syncs the version and writes `dist/build-info.json`.
 
-The dev server runs with `--host 0.0.0.0`, so another device on the same LAN can usually reach it at:
+## Mobile testing
 
-```text
-http://YOUR-COMPUTER-IP:5173/
-```
+See [docs/mobile-testing.md](docs/mobile-testing.md).
 
-Avoid service workers and PWA caching until the update behavior is well understood. Browser reloads should reflect dev changes directly.
+## Not yet
 
-## Tile usage note
-
-The default tile layer uses the public OpenStreetMap tile endpoint for development only. A production deployment should use a proper tile provider or self-hosted tiles.
+No service worker yet. No offline/PWA cache yet. Those come later, after update behavior is boring and predictable.
