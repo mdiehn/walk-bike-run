@@ -2,23 +2,26 @@
 
 Walk Bike Run is a small personal route-planning webapp for walking, biking, and running.
 
-The first milestone is intentionally boring: a reliable dev loop, a Leaflet map, a visible version, tests, and a simple desktop/mobile hello-world screen.
+The current milestone is a basic route editor inspired by Portal Route, but built as a normal Leaflet webapp instead of an IITC plugin.
 
 ## Current state
-
-Phase 1 is the app foundation.
 
 The app currently:
 
 - starts with Vite
 - displays a Leaflet map
 - shows the app version
-- lets you click/tap the map to add test points
-- lets you add and clear a sample point from the panel
-- shows simple desktop/mobile status info
+- lets you click/tap the map to add route points
+- lets you add a route point at the current map center
+- shows route points in a list
+- lets you rename, reorder, and delete route points
+- lets you drag map markers to move points
+- shows straight-line route distance
+- supports a loop-back-to-start toggle
+- can fit the map to the current route
 - has unit and Playwright smoke tests
 
-It does not yet have real route planning, save/load, GPX, routing providers, GPS recording, or PWA caching.
+It does not yet have save/load, GPX, road/path routing providers, GPS recording, or PWA caching.
 
 ## Setup
 
