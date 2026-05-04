@@ -37,6 +37,7 @@ let route = createRoute({ name: "New route", activityType: "walk" });
 let routeLibrary = loadRouteLibrary();
 let activeSavedRouteId = null;
 let routeDirty = false;
+let pendingLibraryImport = null;
 let map;
 let pointLayer;
 let lineLayer;
@@ -129,6 +130,13 @@ app.innerHTML = `
             <input id="importLibraryFile" class="sr-only" type="file" accept="application/json,.json" />
           </div>
           <p id="backupStatus" class="hint-text" data-testid="backup-status">Back up saved routes as app JSON.</p>
+          <div id="importPreview" class="import-preview is-hidden" data-testid="import-preview" hidden>
+            <p id="importPreviewText"></p>
+            <div class="button-row">
+              <button id="confirmImportLibrary" type="button" class="danger">Replace library</button>
+              <button id="cancelImportLibrary" type="button" class="secondary">Cancel import</button>
+            </div>
+          </div>
         </section>
 
         <section class="panel-section">
@@ -159,6 +167,10 @@ const elements = {
   exportLibrary: document.querySelector("#exportLibrary"),
   importLibraryButton: document.querySelector("#importLibraryButton"),
   importLibraryFile: document.querySelector("#importLibraryFile"),
+  importPreview: document.querySelector("#importPreview"),
+  importPreviewText: document.querySelector("#importPreviewText"),
+  confirmImportLibrary: document.querySelector("#confirmImportLibrary"),
+  cancelImportLibrary: document.querySelector("#cancelImportLibrary"),
   backupStatus: document.querySelector("#backupStatus"),
   savedRouteList: document.querySelector("#savedRouteList"),
   pointList: document.querySelector("#pointList"),
@@ -426,31 +438,62 @@ function exportLibraryJson() {
   elements.backupStatus.textContent = `Exported ${routeLibrary.length} saved route${routeLibrary.length === 1 ? "" : "s"}.`;
 }
 
-async function importLibraryJson(file) {
+async function stageLibraryImport(file) {
   if (!file) return;
 
   try {
     const importedLibrary = parseRouteLibraryBackup(await file.text());
-    const shouldImport =
-      routeLibrary.length === 0 ||
-      window.confirm(
-        `Import ${importedLibrary.length} saved route${importedLibrary.length === 1 ? "" : "s"}? This will replace your current route library.`,
-      );
-
-    if (!shouldImport) {
-      elements.backupStatus.textContent = "Import canceled.";
-      return;
-    }
-
-    routeLibrary = importedLibrary;
-    activeSavedRouteId = null;
-    routeDirty = true;
-    persistLibrary();
-    renderRoute();
-    elements.backupStatus.textContent = `Imported ${routeLibrary.length} saved route${routeLibrary.length === 1 ? "" : "s"}.`;
+    pendingLibraryImport = {
+      fileName: file.name || "selected file",
+      library: importedLibrary,
+    };
+    renderImportPreview();
+    elements.backupStatus.textContent =
+      "Review the import before replacing your library.";
   } catch (error) {
+    pendingLibraryImport = null;
+    renderImportPreview();
     elements.backupStatus.textContent = error.message;
   }
+}
+
+function confirmLibraryImport() {
+  if (!pendingLibraryImport) return;
+
+  const importedLibrary = pendingLibraryImport.library;
+  routeLibrary = importedLibrary;
+  activeSavedRouteId = null;
+  routeDirty = true;
+  pendingLibraryImport = null;
+  persistLibrary();
+  renderRoute();
+  renderImportPreview();
+  elements.backupStatus.textContent = `Imported ${routeLibrary.length} saved route${routeLibrary.length === 1 ? "" : "s"}.`;
+}
+
+function cancelLibraryImport() {
+  pendingLibraryImport = null;
+  renderImportPreview();
+  elements.backupStatus.textContent = "Import canceled.";
+}
+
+function renderImportPreview() {
+  if (!pendingLibraryImport) {
+    elements.importPreview.hidden = true;
+    elements.importPreview.classList.add("is-hidden");
+    elements.importPreviewText.textContent = "";
+    elements.confirmImportLibrary.disabled = true;
+    elements.cancelImportLibrary.disabled = true;
+    return;
+  }
+
+  const importCount = pendingLibraryImport.library.length;
+  const currentCount = routeLibrary.length;
+  elements.importPreview.hidden = false;
+  elements.importPreview.classList.remove("is-hidden");
+  elements.confirmImportLibrary.disabled = false;
+  elements.cancelImportLibrary.disabled = false;
+  elements.importPreviewText.textContent = `${pendingLibraryImport.fileName} contains ${importCount} saved route${importCount === 1 ? "" : "s"}. Replacing will remove your current ${currentCount} saved route${currentCount === 1 ? "" : "s"}.`;
 }
 
 function persistLibrary() {
@@ -540,9 +583,11 @@ elements.importLibraryButton.addEventListener("click", () =>
   elements.importLibraryFile.click(),
 );
 elements.importLibraryFile.addEventListener("change", async (event) => {
-  await importLibraryJson(event.target.files?.[0]);
+  await stageLibraryImport(event.target.files?.[0]);
   event.target.value = "";
 });
+elements.confirmImportLibrary.addEventListener("click", confirmLibraryImport);
+elements.cancelImportLibrary.addEventListener("click", cancelLibraryImport);
 
 elements.pointList.addEventListener("click", (event) => {
   const deleteButton = event.target.closest("[data-delete-point]");
@@ -594,4 +639,5 @@ window.addEventListener("resize", updateDeviceStatus);
 
 initMap();
 updateDeviceStatus();
+renderImportPreview();
 renderRoute();

@@ -18,9 +18,19 @@ The backup file contains:
 
 ## What import does
 
-Import JSON reads a Walk Bike Run route library backup and replaces the current saved route library.
+Import JSON reads a Walk Bike Run route library backup and stages it for review.
 
-For now, import does not merge routes. Replacing the library is simpler and safer while the route model is still young.
+The app shows a short preview with:
+
+- the file name
+- the number of saved routes in the import
+- the number of saved routes currently in the local library
+
+Nothing is replaced until **Replace library** is pressed.
+
+For now, import replaces the whole route library. It does not merge routes yet. Replacing the library is simpler and safer while the route model is still young.
+
+Use **Cancel import** to discard the staged import without changing the current saved routes.
 
 ## Why this comes before GPX
 

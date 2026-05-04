@@ -86,7 +86,7 @@ That means:
 
 The JSON export/import feature is an app backup format, not GPX. It is meant to keep saved local routes safe while the app is still young.
 
-Importing a backup replaces the current saved route library after confirmation. It does not merge routes yet.
+Importing a backup stages a preview first. Press **Replace library** to replace the current saved route library. It does not merge routes yet.
 
 See [docs/library-backups.md](docs/library-backups.md).
 

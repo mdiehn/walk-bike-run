@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stage JSON library imports for review before replacing saved routes.
+- Add import cancel/confirm coverage to Playwright tests.
 - Add app JSON export/import for saved route library backups.
 - Add backup validation and route backup unit tests.
 - Bump development version to `0.2.0-dev`.

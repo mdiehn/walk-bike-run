@@ -81,3 +81,102 @@ test("shows route library backup controls", async ({ page }) => {
     "Back up saved routes as app JSON.",
   );
 });
+
+test("stages and cancels route library JSON import", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByLabel("Route name").fill("Keep this route");
+  await page.getByLabel("Route name").blur();
+  await page.getByRole("button", { name: "Add point at map center" }).click();
+  await page.getByRole("button", { name: "Save route" }).click();
+
+  await page.locator("#importLibraryFile").setInputFiles({
+    name: "routes.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify(createRouteLibraryBackupFixture("Imported route")),
+    ),
+  });
+
+  await expect(page.getByTestId("backup-status")).toHaveText(
+    "Review the import before replacing your library.",
+  );
+  await expect(page.getByTestId("import-preview")).toContainText(
+    "routes.json contains 1 saved route",
+  );
+  await expect(page.getByTestId("import-preview")).toContainText(
+    "current 1 saved route",
+  );
+
+  await page.getByRole("button", { name: "Cancel import" }).click();
+
+  await expect(page.getByTestId("backup-status")).toHaveText(
+    "Import canceled.",
+  );
+  await expect(page.getByTestId("import-preview")).toBeHidden();
+  await expect(page.getByTestId("saved-route-list")).toContainText(
+    "Keep this route",
+  );
+  await expect(page.getByTestId("saved-route-list")).not.toContainText(
+    "Imported route",
+  );
+});
+
+test("confirms route library JSON import replacement", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByLabel("Route name").fill("Replace this route");
+  await page.getByLabel("Route name").blur();
+  await page.getByRole("button", { name: "Add point at map center" }).click();
+  await page.getByRole("button", { name: "Save route" }).click();
+
+  await page.locator("#importLibraryFile").setInputFiles({
+    name: "routes.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify(createRouteLibraryBackupFixture("Imported route")),
+    ),
+  });
+
+  await page.getByRole("button", { name: "Replace library" }).click();
+
+  await expect(page.getByTestId("backup-status")).toHaveText(
+    "Imported 1 saved route.",
+  );
+  await expect(page.getByTestId("import-preview")).toBeHidden();
+  await expect(page.getByTestId("saved-route-list")).toContainText(
+    "Imported route",
+  );
+  await expect(page.getByTestId("saved-route-list")).not.toContainText(
+    "Replace this route",
+  );
+});
+
+function createRouteLibraryBackupFixture(routeName) {
+  return {
+    schemaVersion: 1,
+    kind: "walk-bike-run.route-library-backup",
+    appVersion: "0.2.0-dev",
+    exportedAt: "2026-05-03T13:00:00.000Z",
+    routes: [
+      {
+        schemaVersion: 1,
+        id: "saved-imported",
+        name: routeName,
+        activityType: "walk",
+        loop: false,
+        points: [
+          {
+            id: "point-imported",
+            name: "Imported point",
+            lat: 43.6426,
+            lng: -72.2518,
+          },
+        ],
+        distanceMeters: 0,
+        createdAt: "2026-05-03T12:00:00.000Z",
+        updatedAt: "2026-05-03T12:00:00.000Z",
+      },
+    ],
+  };
+}
