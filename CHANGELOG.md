@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Guard against accidentally discarding unsaved route edits.
+- Confirm before clearing, starting a new route, loading a saved route, or replacing the current route from import when unsaved changes exist.
+- Simplify save status labels to `New unsaved route`, `Unsaved changes`, and `Saved`.
+
 - Show saved route activity, distance, point count, estimated time, and updated date in the library.
 - Add Playwright coverage for saved route library stats.
 

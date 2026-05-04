@@ -49,9 +49,34 @@ test("adds, renames, reorders, and clears route points", async ({ page }) => {
   await page.getByRole("button", { name: "Up" }).last().click();
   await expect(page.getByLabel("Point 1 name")).toHaveValue("Turnaround");
 
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Clear this route");
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: "Clear" }).click();
   await expect(page.getByTestId("point-count")).toHaveText("0");
   await expect(page.getByTestId("point-list")).toContainText("No points yet.");
+});
+
+test("guards clearing unsaved route changes", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Add point at map center" }).click();
+  await expect(page.getByTestId("save-status")).toHaveText("New unsaved route");
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Clear this route");
+    await dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.getByTestId("point-count")).toHaveText("1");
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Clear this route");
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.getByTestId("point-count")).toHaveText("0");
 });
 
 test("saves, loads, copies, and deletes routes in the local library", async ({
@@ -64,9 +89,7 @@ test("saves, loads, copies, and deletes routes in the local library", async ({
   await page.getByRole("button", { name: "Add point at map center" }).click();
   await page.getByRole("button", { name: "Save route" }).click();
 
-  await expect(page.getByTestId("save-status")).toHaveText(
-    "Saved in route library",
-  );
+  await expect(page.getByTestId("save-status")).toHaveText("Saved");
   await expect(page.getByTestId("saved-route-list")).toContainText(
     "Library test walk",
   );
@@ -198,6 +221,10 @@ test("confirms current route JSON import replacement", async ({ page }) => {
     ),
   });
 
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Importing this route");
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: "Replace current route" }).click();
 
   await expect(page.getByTestId("route-file-status")).toHaveText(
@@ -233,6 +260,10 @@ test("stages and confirms current route GPX import", async ({ page }) => {
     "Imported GPX route",
   );
 
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Importing this route");
+    await dialog.accept();
+  });
   await page.getByRole("button", { name: "Replace current route" }).click();
 
   await expect(page.getByTestId("route-file-status")).toHaveText(

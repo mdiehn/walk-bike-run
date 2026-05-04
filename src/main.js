@@ -277,6 +277,23 @@ function markRouteDirty() {
   renderRoute();
 }
 
+function confirmDiscardUnsavedChanges(actionLabel) {
+  if (!routeDirty) return true;
+  return window.confirm(
+    `${actionLabel} will discard unsaved route changes. Continue?`,
+  );
+}
+
+function confirmClearRoute() {
+  if (route.points.length === 0) return true;
+  if (routeDirty) {
+    return window.confirm(
+      "Clear this route and discard unsaved route changes?",
+    );
+  }
+  return window.confirm("Clear this route?");
+}
+
 function renderRoute() {
   renderRouteFields();
   renderPointList();
@@ -457,6 +474,7 @@ function saveCurrentRoute({ asCopy = false } = {}) {
 function loadSavedRoute(savedRouteId) {
   const savedRoute = getSavedRoute(routeLibrary, savedRouteId);
   if (!savedRoute) return;
+  if (!confirmDiscardUnsavedChanges("Loading a saved route")) return;
 
   setRoute(savedRouteToRoute(savedRoute), { savedRouteId, dirty: false });
   fitRouteToMap();
@@ -479,6 +497,8 @@ function removeSavedRoute(savedRouteId) {
 }
 
 function startNewRoute() {
+  if (!confirmDiscardUnsavedChanges("Starting a new route")) return;
+
   setRoute(
     createRoute({ name: "New route", activityType: route.activityType }),
     {
@@ -528,6 +548,7 @@ async function stageCurrentRouteImport(file) {
 
 function confirmCurrentRouteImport() {
   if (!pendingRouteImport) return;
+  if (!confirmDiscardUnsavedChanges("Importing this route")) return;
 
   const importedRoute = pendingRouteImport.route;
   pendingRouteImport = null;
@@ -681,11 +702,8 @@ function persistLibrary() {
 }
 
 function getSaveStatusText() {
-  if (!activeSavedRouteId)
-    return routeDirty ? "Unsaved route changes" : "Unsaved route";
-  return routeDirty
-    ? "Saved route has unsaved changes"
-    : "Saved in route library";
+  if (!activeSavedRouteId) return "New unsaved route";
+  return routeDirty ? "Unsaved changes" : "Saved";
 }
 
 function updateDeviceStatus() {
@@ -781,6 +799,7 @@ elements.addCenterPoint.addEventListener("click", () => {
 elements.fitRoute.addEventListener("click", fitRouteToMap);
 
 elements.clearPoints.addEventListener("click", () => {
+  if (!confirmClearRoute()) return;
   route = clearPoints(route);
   markRouteDirty();
 });

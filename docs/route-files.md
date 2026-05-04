@@ -58,6 +58,8 @@ The app shows a short preview with:
 
 Nothing is replaced until **Replace current route** is pressed.
 
+If the current route has unsaved changes, the app asks for confirmation before replacing it. Canceling that browser confirmation leaves the staged import in place so it can still be reviewed or canceled.
+
 Importing a current-route file replaces the route currently shown in the editor. It does not replace or merge the saved route library.
 
 Use **Cancel route import** to discard the staged import without changing the current route.

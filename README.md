@@ -23,6 +23,8 @@ The app currently:
 - saves routes to a local browser route library
 - loads, duplicates, and deletes saved local routes
 - shows saved route activity, distance, point count, estimate, and updated date
+- tracks whether the current route has unsaved changes
+- confirms before destructive actions discard unsaved route edits
 - keeps saved route order stable when routes are re-saved
 - exports and imports the current route as app JSON
 - exports and imports the current route as GPX
@@ -84,16 +86,16 @@ That means:
 - clearing site data can delete saved routes
 - there is no account sync yet
 - use **Export JSON** to back up saved routes
-- use **Import JSON** to replace the current saved route library with a backup
+- use **Import JSON** to stage and review a saved-library replacement
 
 ## Route files and library backups
 
 Current-route export/import supports both the app JSON route format and GPX.
 
 - **Export current route JSON** saves just the route currently shown in the editor using the app format.
-- **Import current route JSON** stages one app route file for review, then can replace the current editor route.
+- **Import current route JSON** stages one app route file for review, then can replace the current editor route. If the current route has unsaved changes, the app asks for confirmation before replacing it.
 - **Export current route GPX** saves the current route as GPX 1.1.
-- **Import current route GPX** stages one GPX route or track for review, then can replace the current editor route.
+- **Import current route GPX** stages one GPX route or track for review, then can replace the current editor route. If the current route has unsaved changes, the app asks for confirmation before replacing it.
 - **Export JSON** under Library backup saves the whole local route library.
 - **Import JSON** under Library backup stages a full library replacement for review.
 

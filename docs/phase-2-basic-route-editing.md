@@ -18,6 +18,8 @@ Goal: make Walk Bike Run useful as a small manual route sketcher before adding G
 - Save the current route to a local browser route library.
 - Load, duplicate, and delete saved local routes.
 - Start a new route without clearing the local library.
+- Show simple save/unsaved status for the current route.
+- Confirm before clearing, starting a new route, loading a saved route, or replacing the current route from import when unsaved changes would be discarded.
 
 ## Route library behavior
 
@@ -30,20 +32,20 @@ Important limits:
 - Saved routes are local to the current browser profile and device.
 - Clearing site data can delete saved routes.
 - Routes do not sync between desktop and phone yet.
-- Export/import should come before anyone trusts this with important routes.
+- Export/import exists now, but saved routes still live only in this browser unless backed up manually.
 
 ## Known limits
 
 - Distance is straight-line distance, not road/path distance.
-- There is no GPX or GeoJSON import/export yet.
+- GPX and app JSON import/export exist, but GeoJSON does not yet.
 - There is no route provider adapter yet.
 - There is no GPS/current-location integration yet.
 - There is no PWA/service-worker caching yet.
 
 ## Good next steps
 
-1. Add JSON backup/export for the local library.
-2. Add GPX export/import.
-3. Improve mobile layout for the route library.
-4. Add drag-to-reorder in the list or keep up/down buttons if that feels better.
+1. Improve mobile layout for the route editor and library.
+2. Add library sorting/filtering once the display shape is clearer.
+3. Add drag-to-reorder in the list or keep up/down buttons if that feels better.
+4. Add GeoJSON support if it proves useful.
 5. Add a routing provider adapter after the manual route model feels solid.
