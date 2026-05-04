@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add route estimated time and default pace/speed display.
+- Add simple activity speed helpers and route stat tests.
+
+- Add GPX export/import for the current route.
+- Stage GPX imports before replacing the editor route.
+- Add GPX parser/serializer unit tests and Playwright coverage.
+
 - Add app JSON export/import for the current route.
 - Stage current-route JSON imports before replacing the editor route.
 - Add route file validation, unit tests, docs, and Playwright coverage.

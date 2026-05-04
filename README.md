@@ -17,16 +17,18 @@ The app currently:
 - lets you rename, reorder, and delete route points
 - lets you drag map markers to move points
 - shows straight-line route distance
+- shows simple estimated time and default pace/speed
 - supports a loop-back-to-start toggle
 - can fit the map to the current route
 - saves routes to a local browser route library
 - loads, duplicates, and deletes saved local routes
 - keeps saved route order stable when routes are re-saved
 - exports and imports the current route as app JSON
+- exports and imports the current route as GPX
 - exports and imports the saved route library as app JSON backups
 - has unit and Playwright smoke tests
 
-It does not yet have GPX, road/path routing providers, GPS recording, account sync, or PWA caching.
+It does not yet have road/path routing providers, GPS recording, account sync, or PWA caching.
 
 ## Setup
 
@@ -85,14 +87,16 @@ That means:
 
 ## Route files and library backups
 
-The JSON export/import features are app formats, not GPX.
+Current-route export/import supports both the app JSON route format and GPX.
 
-- **Export current route JSON** saves just the route currently shown in the editor.
-- **Import current route JSON** stages one route for review, then can replace the current editor route.
+- **Export current route JSON** saves just the route currently shown in the editor using the app format.
+- **Import current route JSON** stages one app route file for review, then can replace the current editor route.
+- **Export current route GPX** saves the current route as GPX 1.1.
+- **Import current route GPX** stages one GPX route or track for review, then can replace the current editor route.
 - **Export JSON** under Library backup saves the whole local route library.
 - **Import JSON** under Library backup stages a full library replacement for review.
 
-See [docs/route-files.md](docs/route-files.md) and [docs/library-backups.md](docs/library-backups.md).
+See [docs/route-files.md](docs/route-files.md), [docs/library-backups.md](docs/library-backups.md), and [docs/route-stats.md](docs/route-stats.md).
 
 ## Version
 

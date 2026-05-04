@@ -3,8 +3,20 @@ const MIN_LAT = -90;
 const MAX_LAT = 90;
 const MIN_LNG = -180;
 const MAX_LNG = 180;
+const METERS_PER_MILE = 1609.344;
 
-export function createRoute({ name = 'Untitled route', activityType = 'walk', loop = false, points = [] } = {}) {
+export const ACTIVITY_SPEEDS_MPH = {
+  walk: 3,
+  bike: 12,
+  run: 6,
+};
+
+export function createRoute({
+  name = "Untitled route",
+  activityType = "walk",
+  loop = false,
+  points = [],
+} = {}) {
   return {
     name: normalizeRouteName(name),
     activityType: normalizeActivityType(activityType),
@@ -16,9 +28,14 @@ export function createRoute({ name = 'Untitled route', activityType = 'walk', lo
 export function updateRoute(route, changes = {}) {
   return {
     ...route,
-    name: changes.name === undefined ? route.name : normalizeRouteName(changes.name),
+    name:
+      changes.name === undefined
+        ? route.name
+        : normalizeRouteName(changes.name),
     activityType:
-      changes.activityType === undefined ? route.activityType : normalizeActivityType(changes.activityType),
+      changes.activityType === undefined
+        ? route.activityType
+        : normalizeActivityType(changes.activityType),
     loop: changes.loop === undefined ? route.loop : Boolean(changes.loop),
   };
 }
@@ -34,7 +51,9 @@ export function updatePoint(route, pointId, changes = {}) {
   return {
     ...route,
     points: route.points.map((point) =>
-      point.id === pointId ? normalizePoint({ ...point, ...changes, id: point.id }) : point,
+      point.id === pointId
+        ? normalizePoint({ ...point, ...changes, id: point.id })
+        : point,
     ),
   };
 }
@@ -78,6 +97,18 @@ export function movePoint(route, pointId, delta) {
   };
 }
 
+export function activitySpeedMph(activityType) {
+  return ACTIVITY_SPEEDS_MPH[normalizeActivityType(activityType)];
+}
+
+export function estimatedDurationMinutes(route) {
+  const speedMph = activitySpeedMph(route.activityType);
+  if (!speedMph) return 0;
+
+  const distanceMiles = totalDistanceMeters(route) / METERS_PER_MILE;
+  return (distanceMiles / speedMph) * 60;
+}
+
 export function totalDistanceMeters(route) {
   const points = route.points;
   if (points.length < 2) return 0;
@@ -109,18 +140,20 @@ export function distanceMeters(a, b) {
 
 function normalizePoint(point) {
   if (!point) {
-    throw new Error('Route point is required.');
+    throw new Error("Route point is required.");
   }
 
   const lat = Number(point.lat);
   const lng = Number(point.lng);
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    throw new Error('Route points need numeric lat and lng values.');
+    throw new Error("Route points need numeric lat and lng values.");
   }
 
   if (lat < MIN_LAT || lat > MAX_LAT || lng < MIN_LNG || lng > MAX_LNG) {
-    throw new Error('Route point coordinates are outside valid latitude/longitude ranges.');
+    throw new Error(
+      "Route point coordinates are outside valid latitude/longitude ranges.",
+    );
   }
 
   return {
@@ -132,16 +165,16 @@ function normalizePoint(point) {
 }
 
 function normalizeRouteName(name) {
-  return String(name ?? '').trim() || 'Untitled route';
+  return String(name ?? "").trim() || "Untitled route";
 }
 
 function normalizePointName(name) {
-  return String(name ?? '').trim() || 'Map point';
+  return String(name ?? "").trim() || "Map point";
 }
 
 function normalizeActivityType(activityType) {
-  const normalized = String(activityType ?? 'walk').toLowerCase();
-  return ['walk', 'bike', 'run'].includes(normalized) ? normalized : 'walk';
+  const normalized = String(activityType ?? "walk").toLowerCase();
+  return ["walk", "bike", "run"].includes(normalized) ? normalized : "walk";
 }
 
 function clamp(value, min, max) {

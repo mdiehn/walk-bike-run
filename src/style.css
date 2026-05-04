@@ -224,10 +224,31 @@ select:focus {
   outline: 3px solid rgb(31 111 235 / 0.18);
 }
 
-.distance-text {
-  font-size: 1.1rem;
+.route-stats {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0.75rem;
+}
+
+.route-stat-card {
+  background: #f6f8fa;
+  border-radius: 0.8rem;
+  padding: 0.65rem;
+}
+
+.route-stat-card span {
+  color: #57606a;
+  display: block;
+  font-size: 0.74rem;
   font-weight: 800;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.route-stat-card strong {
+  display: block;
+  font-size: 0.95rem;
 }
 
 .hint-text {
@@ -444,7 +465,8 @@ select:focus {
     flex-direction: column;
   }
 
-  .status-grid {
+  .status-grid,
+  .route-stats {
     grid-template-columns: 1fr;
   }
 

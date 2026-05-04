@@ -3,11 +3,13 @@ import "leaflet/dist/leaflet.css";
 import "./style.css";
 
 import {
+  activitySpeedMph,
   addPoint,
   clearPoints,
   createRoute,
   deletePoint,
   movePoint,
+  estimatedDurationMinutes,
   renamePoint,
   setLoop,
   totalDistanceMeters,
@@ -29,6 +31,7 @@ import {
   serializeRouteLibraryBackup,
 } from "./route-backup.js";
 import { parseRouteFile, serializeRouteFile } from "./route-file.js";
+import { parseRouteGpx, serializeRouteGpx } from "./gpx.js";
 import { APP_VERSION } from "./version.js";
 
 const INITIAL_CENTER = [43.6426, -72.2518];
@@ -81,9 +84,22 @@ app.innerHTML = `
             <input id="loopToggle" type="checkbox" />
             Loop back to start
           </label>
-          <p id="distanceText" class="distance-text">Distance: 0.00 mi</p>
+          <div class="route-stats" aria-label="Route stats">
+            <div class="route-stat-card">
+              <span>Distance</span>
+              <strong id="distanceText" data-testid="distance-text">0.00 mi</strong>
+            </div>
+            <div class="route-stat-card">
+              <span>Estimated time</span>
+              <strong id="estimatedTimeText" data-testid="estimated-time">0 min</strong>
+            </div>
+            <div class="route-stat-card">
+              <span>Default pace</span>
+              <strong id="paceText" data-testid="pace-text">20:00 / mi</strong>
+            </div>
+          </div>
           <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
-          <p class="hint-text">Distance is straight-line for now. Road/path routing comes later.</p>
+          <p class="hint-text">Stats use straight-line distance and simple default speeds for now. Road/path routing comes later.</p>
         </section>
 
         <section class="panel-section status-grid" aria-label="Status">
@@ -120,8 +136,11 @@ app.innerHTML = `
             <button id="exportCurrentRoute" type="button" class="secondary">Export current route JSON</button>
             <button id="importCurrentRouteButton" type="button" class="secondary">Import current route JSON</button>
             <input id="importCurrentRouteFile" class="sr-only" type="file" accept="application/json,.json" />
+            <button id="exportCurrentRouteGpx" type="button" class="secondary">Export current route GPX</button>
+            <button id="importCurrentRouteGpxButton" type="button" class="secondary">Import current route GPX</button>
+            <input id="importCurrentRouteGpxFile" class="sr-only" type="file" accept="application/gpx+xml,application/xml,text/xml,.gpx,.xml" />
           </div>
-          <p id="routeFileStatus" class="hint-text" data-testid="route-file-status">Export or import one route as app JSON.</p>
+          <p id="routeFileStatus" class="hint-text" data-testid="route-file-status">Export or import one route as app JSON or GPX.</p>
           <div id="routeImportPreview" class="import-preview is-hidden" data-testid="route-import-preview" hidden>
             <p id="routeImportPreviewText"></p>
             <div class="button-row">
@@ -173,6 +192,8 @@ const elements = {
   viewportStatus: document.querySelector("#viewportStatus"),
   pointCount: document.querySelector("#pointCount"),
   distanceText: document.querySelector("#distanceText"),
+  estimatedTimeText: document.querySelector("#estimatedTimeText"),
+  paceText: document.querySelector("#paceText"),
   saveStatus: document.querySelector("#saveStatus"),
   routeName: document.querySelector("#routeName"),
   activityType: document.querySelector("#activityType"),
@@ -186,6 +207,13 @@ const elements = {
   exportCurrentRoute: document.querySelector("#exportCurrentRoute"),
   importCurrentRouteButton: document.querySelector("#importCurrentRouteButton"),
   importCurrentRouteFile: document.querySelector("#importCurrentRouteFile"),
+  exportCurrentRouteGpx: document.querySelector("#exportCurrentRouteGpx"),
+  importCurrentRouteGpxButton: document.querySelector(
+    "#importCurrentRouteGpxButton",
+  ),
+  importCurrentRouteGpxFile: document.querySelector(
+    "#importCurrentRouteGpxFile",
+  ),
   routeImportPreview: document.querySelector("#routeImportPreview"),
   routeImportPreviewText: document.querySelector("#routeImportPreviewText"),
   confirmImportCurrentRoute: document.querySelector(
@@ -254,8 +282,13 @@ function renderRoute() {
   renderPointList();
   renderLibraryList();
   renderMapRoute();
+  const distanceMeters = totalDistanceMeters(route);
   elements.pointCount.textContent = String(route.points.length);
-  elements.distanceText.textContent = `Distance: ${formatMiles(totalDistanceMeters(route))}`;
+  elements.distanceText.textContent = formatMiles(distanceMeters);
+  elements.estimatedTimeText.textContent = formatDuration(
+    estimatedDurationMinutes(route),
+  );
+  elements.paceText.textContent = formatDefaultPace(route.activityType);
   elements.saveStatus.textContent = getSaveStatusText();
 }
 
@@ -521,6 +554,44 @@ function renderRouteImportPreview() {
   elements.routeImportPreviewText.textContent = `${pendingRouteImport.fileName} contains "${importedRoute.name}" with ${importedRoute.points.length} point${importedRoute.points.length === 1 ? "" : "s"}. Replacing will overwrite the current unsaved route view, but it will not change saved library routes.`;
 }
 
+function exportCurrentRouteGpx() {
+  const gpx = serializeRouteGpx(route, {
+    appVersion: APP_VERSION,
+  });
+  const blob = new Blob([gpx], { type: "application/gpx+xml" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const dateStamp = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `${slugify(route.name)}-${dateStamp}.gpx`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  elements.routeFileStatus.textContent = `Exported current route GPX: ${route.name}.`;
+}
+
+async function stageCurrentRouteGpxImport(file) {
+  if (!file) return;
+
+  try {
+    const importedRoute = parseRouteGpx(await file.text());
+    pendingRouteImport = {
+      fileName: file.name || "selected GPX file",
+      route: importedRoute,
+    };
+    renderRouteImportPreview();
+    elements.routeFileStatus.textContent =
+      "Review the GPX import before replacing the current route.";
+  } catch (error) {
+    pendingRouteImport = null;
+    renderRouteImportPreview();
+    elements.routeFileStatus.textContent = error.message;
+  }
+}
+
 function exportLibraryJson() {
   const json = serializeRouteLibraryBackup(routeLibrary, {
     appVersion: APP_VERSION,
@@ -624,6 +695,29 @@ function formatMiles(meters) {
   return `${(meters / 1609.344).toFixed(2)} mi`;
 }
 
+function formatDuration(minutes) {
+  if (!Number.isFinite(minutes) || minutes <= 0) return "0 min";
+  if (minutes < 1) return "<1 min";
+
+  const roundedMinutes = Math.round(minutes);
+  const hours = Math.floor(roundedMinutes / 60);
+  const remainderMinutes = roundedMinutes % 60;
+
+  if (hours === 0) return `${roundedMinutes} min`;
+  if (remainderMinutes === 0) return `${hours} hr`;
+  return `${hours} hr ${remainderMinutes} min`;
+}
+
+function formatDefaultPace(activityType) {
+  const speedMph = activitySpeedMph(activityType);
+  if (activityType === "bike") return `${speedMph.toFixed(1)} mph`;
+
+  const paceMinutes = 60 / speedMph;
+  const minutes = Math.floor(paceMinutes);
+  const seconds = Math.round((paceMinutes - minutes) * 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")} / mi`;
+}
+
 function formatActivityType(activityType) {
   return activityType.charAt(0).toUpperCase() + activityType.slice(1);
 }
@@ -696,6 +790,14 @@ elements.importCurrentRouteButton.addEventListener("click", () =>
 );
 elements.importCurrentRouteFile.addEventListener("change", async (event) => {
   await stageCurrentRouteImport(event.target.files?.[0]);
+  event.target.value = "";
+});
+elements.exportCurrentRouteGpx.addEventListener("click", exportCurrentRouteGpx);
+elements.importCurrentRouteGpxButton.addEventListener("click", () =>
+  elements.importCurrentRouteGpxFile.click(),
+);
+elements.importCurrentRouteGpxFile.addEventListener("change", async (event) => {
+  await stageCurrentRouteGpxImport(event.target.files?.[0]);
   event.target.value = "";
 });
 elements.confirmImportCurrentRoute.addEventListener(

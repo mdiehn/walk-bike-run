@@ -9,6 +9,9 @@ test("loads the route editor shell", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByTestId("map")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Route list" })).toBeVisible();
+  await expect(page.getByTestId("distance-text")).toHaveText("0.00 mi");
+  await expect(page.getByTestId("estimated-time")).toHaveText("0 min");
+  await expect(page.getByTestId("pace-text")).toHaveText("20:00 / mi");
   await expect(page.getByRole("heading", { name: "Route file" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Library", exact: true }),
@@ -16,6 +19,16 @@ test("loads the route editor shell", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Library backup" }),
   ).toBeVisible();
+});
+
+test("updates route stats when activity changes", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByTestId("pace-text")).toHaveText("20:00 / mi");
+  await page.getByLabel("Activity").selectOption("run");
+  await expect(page.getByTestId("pace-text")).toHaveText("10:00 / mi");
+  await page.getByLabel("Activity").selectOption("bike");
+  await expect(page.getByTestId("pace-text")).toHaveText("12.0 mph");
 });
 
 test("adds, renames, reorders, and clears route points", async ({ page }) => {
@@ -105,8 +118,14 @@ test("shows current route JSON controls", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Import current route JSON" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Export current route GPX" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Import current route GPX" }),
+  ).toBeVisible();
   await expect(page.getByTestId("route-file-status")).toHaveText(
-    "Export or import one route as app JSON.",
+    "Export or import one route as app JSON or GPX.",
   );
 });
 
@@ -168,6 +187,37 @@ test("confirms current route JSON import replacement", async ({ page }) => {
   await expect(page.getByTestId("saved-route-list")).toContainText(
     "No saved routes yet.",
   );
+});
+
+test("stages and confirms current route GPX import", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByLabel("Route name").fill("Replace with GPX");
+  await page.getByLabel("Route name").blur();
+
+  await page.locator("#importCurrentRouteGpxFile").setInputFiles({
+    name: "morning-loop.gpx",
+    mimeType: "application/gpx+xml",
+    buffer: Buffer.from(createGpxFixture("Imported GPX route")),
+  });
+
+  await expect(page.getByTestId("route-file-status")).toHaveText(
+    "Review the GPX import before replacing the current route.",
+  );
+  await expect(page.getByTestId("route-import-preview")).toContainText(
+    "morning-loop.gpx contains",
+  );
+  await expect(page.getByTestId("route-import-preview")).toContainText(
+    "Imported GPX route",
+  );
+
+  await page.getByRole("button", { name: "Replace current route" }).click();
+
+  await expect(page.getByTestId("route-file-status")).toHaveText(
+    "Imported route: Imported GPX route.",
+  );
+  await expect(page.getByLabel("Route name")).toHaveValue("Imported GPX route");
+  await expect(page.getByTestId("point-count")).toHaveText("2");
 });
 
 test("stages and cancels route library JSON import", async ({ page }) => {
@@ -289,4 +339,16 @@ function createRouteFileFixture(routeName) {
       ],
     },
   };
+}
+
+function createGpxFixture(routeName) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Walk Bike Run test">
+  <rte>
+    <name>${routeName}</name>
+    <type>bike</type>
+    <rtept lat="43.6426" lon="-72.2518"><name>Start</name></rtept>
+    <rtept lat="43.6526" lon="-72.2618"><name>Turnaround</name></rtept>
+  </rte>
+</gpx>`;
 }
