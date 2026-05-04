@@ -343,12 +343,19 @@ function renderLibraryList() {
         : "";
 
       return `
-        <li class="saved-route-row ${isActive ? "is-active" : ""}" data-saved-route-id="${escapeAttr(savedRoute.id)}">
+        <li class="saved-route-row ${isActive ? "is-active" : ""}" data-saved-route-id="${escapeAttr(savedRoute.id)}" data-testid="saved-route-row">
           <div class="saved-route-main">
-            <strong>${escapeHtml(savedRoute.name)}</strong>
-            ${activeLabel}
-            <span>${formatActivityType(savedRoute.activityType)} · ${savedRoute.points.length} point${savedRoute.points.length === 1 ? "" : "s"} · ${formatMiles(savedRoute.distanceMeters)}</span>
-            <span>Updated ${formatDate(savedRoute.updatedAt)}</span>
+            <div class="saved-route-title-row">
+              <strong>${escapeHtml(savedRoute.name)}</strong>
+              ${activeLabel}
+            </div>
+            <div class="saved-route-meta-grid" data-testid="saved-route-meta">
+              <span><b>Activity</b>${formatActivityType(savedRoute.activityType)}</span>
+              <span><b>Distance</b>${formatMiles(savedRoute.distanceMeters)}</span>
+              <span><b>Points</b>${formatPointCount(savedRoute.points.length)}</span>
+              <span><b>Estimate</b>${formatDuration(estimatedDurationMinutes(savedRoute))}</span>
+            </div>
+            <span class="saved-route-updated" data-testid="saved-route-updated">Updated <time datetime="${escapeAttr(savedRoute.updatedAt)}">${formatDate(savedRoute.updatedAt)}</time></span>
           </div>
           <div class="saved-route-actions">
             <button type="button" class="small-button secondary" data-load-route="${escapeAttr(savedRoute.id)}">Load</button>
@@ -720,6 +727,10 @@ function formatDefaultPace(activityType) {
 
 function formatActivityType(activityType) {
   return activityType.charAt(0).toUpperCase() + activityType.slice(1);
+}
+
+function formatPointCount(pointCount) {
+  return `${pointCount} point${pointCount === 1 ? "" : "s"}`;
 }
 
 function slugify(value) {

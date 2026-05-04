@@ -70,6 +70,28 @@ test("saves, loads, copies, and deletes routes in the local library", async ({
   await expect(page.getByTestId("saved-route-list")).toContainText(
     "Library test walk",
   );
+  const savedRouteRow = page.getByTestId("saved-route-row").first();
+  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
+    "Activity",
+  );
+  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
+    "Walk",
+  );
+  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
+    "Distance",
+  );
+  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
+    "0.00 mi",
+  );
+  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
+    "Points",
+  );
+  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
+    "1 point",
+  );
+  await expect(savedRouteRow.getByTestId("saved-route-updated")).toContainText(
+    "Updated",
+  );
 
   await page.getByRole("button", { name: "New route" }).click();
   await expect(page.getByLabel("Route name")).toHaveValue("New route");

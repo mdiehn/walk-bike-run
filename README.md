@@ -22,6 +22,7 @@ The app currently:
 - can fit the map to the current route
 - saves routes to a local browser route library
 - loads, duplicates, and deletes saved local routes
+- shows saved route activity, distance, point count, estimate, and updated date
 - keeps saved route order stable when routes are re-saved
 - exports and imports the current route as app JSON
 - exports and imports the current route as GPX

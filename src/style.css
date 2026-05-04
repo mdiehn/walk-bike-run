@@ -309,10 +309,41 @@ select:focus {
 .saved-route-main {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.45rem;
 }
 
-.saved-route-main span {
+.saved-route-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.saved-route-meta-grid {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.saved-route-meta-grid span {
+  background: white;
+  border: 1px solid #d8dee4;
+  border-radius: 0.65rem;
+  color: #17202a;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.5rem;
+}
+
+.saved-route-meta-grid b {
+  color: #57606a;
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.15rem;
+  text-transform: uppercase;
+}
+
+.saved-route-updated {
   color: #57606a;
   font-size: 0.85rem;
 }

@@ -2,11 +2,21 @@
 
 Route stats are intentionally simple right now.
 
-The app currently shows:
+The app currently shows route stats in the active route editor and saved route library.
+
+The active route editor shows:
 
 - straight-line distance
 - estimated time
 - default pace/speed
+
+Saved route rows show:
+
+- activity type
+- straight-line distance
+- point count
+- estimated time
+- updated date
 
 Distance is calculated from point to point using latitude/longitude. If loop mode is enabled, the app includes the final segment back to the first point.
 

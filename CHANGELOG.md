@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show saved route activity, distance, point count, estimated time, and updated date in the library.
+- Add Playwright coverage for saved route library stats.
+
 - Add route estimated time and default pace/speed display.
 - Add simple activity speed helpers and route stat tests.
 
