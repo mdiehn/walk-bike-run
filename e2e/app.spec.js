@@ -144,6 +144,37 @@ test("saves, loads, copies, and deletes routes in the local library", async ({
   );
 });
 
+test("selects saved route rows without loading them", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Add point at map center" }).click();
+  await page.getByLabel("Route name").fill("First saved route");
+  await page.getByRole("button", { name: "Save route", exact: true }).click();
+
+  await page.getByRole("button", { name: "New route" }).click();
+  await page.getByRole("button", { name: "Add point at map center" }).click();
+  await page.getByLabel("Route name").fill("Second saved route");
+  await page.getByRole("button", { name: "Save route", exact: true }).click();
+
+  const rows = page.getByTestId("saved-route-row");
+  await expect(rows.filter({ hasText: "Second saved route" })).toHaveClass(
+    /is-selected/,
+  );
+  await expect(rows.filter({ hasText: "First saved route" })).not.toHaveClass(
+    /is-selected/,
+  );
+
+  await rows.filter({ hasText: "First saved route" }).click();
+
+  await expect(rows.filter({ hasText: "First saved route" })).toHaveClass(
+    /is-selected/,
+  );
+  await expect(rows.filter({ hasText: "Second saved route" })).not.toHaveClass(
+    /is-selected/,
+  );
+  await expect(page.getByLabel("Route name")).toHaveValue("Second saved route");
+});
+
 test("shows route library backup controls", async ({ page }) => {
   await page.goto("/");
 

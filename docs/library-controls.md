@@ -36,3 +36,8 @@ Likely future controls:
 - last-used sort
 - use-count sort
 - best-time or recent-time display once activity recording exists
+
+
+## Saved route selection
+
+The saved route highlighted in the library is the selected library row. Clicking another saved route row moves the selection without loading it into the editor. The `Current` label still marks the saved route that is loaded in the editor.

@@ -43,6 +43,7 @@ let routeLibrary = loadRouteLibrary();
 let librarySortBy = "saved";
 let libraryActivityFilter = "all";
 let activeSavedRouteId = null;
+let selectedSavedRouteId = null;
 let routeDirty = false;
 let pendingRouteImport = null;
 let pendingLibraryImport = null;
@@ -293,10 +294,15 @@ function addRoutePoint(lat, lng, name) {
 
 function setRoute(
   nextRoute,
-  { savedRouteId = activeSavedRouteId, dirty = true } = {},
+  {
+    savedRouteId = activeSavedRouteId,
+    selectedRouteId = savedRouteId,
+    dirty = true,
+  } = {},
 ) {
   route = nextRoute;
   activeSavedRouteId = savedRouteId;
+  selectedSavedRouteId = selectedRouteId;
   routeDirty = dirty;
   renderRoute();
 }
@@ -400,17 +406,18 @@ function renderLibraryList() {
 
   elements.savedRouteList.innerHTML = visibleRoutes
     .map((savedRoute) => {
-      const isActive = savedRoute.id === activeSavedRouteId;
-      const activeLabel = isActive
-        ? '<span class="active-route-label">Current</span>'
+      const isCurrent = savedRoute.id === activeSavedRouteId;
+      const isSelected = savedRoute.id === selectedSavedRouteId;
+      const currentLabel = isCurrent
+        ? '<span class="current-route-label">Current</span>'
         : "";
 
       return `
-        <li class="saved-route-row ${isActive ? "is-active" : ""}" data-saved-route-id="${escapeAttr(savedRoute.id)}" data-testid="saved-route-row">
+        <li class="saved-route-row ${isSelected ? "is-selected" : ""} ${isCurrent ? "is-current" : ""}" data-saved-route-id="${escapeAttr(savedRoute.id)}" data-testid="saved-route-row" tabindex="0">
           <div class="saved-route-main">
             <div class="saved-route-title-row">
               <strong data-testid="saved-route-name">${escapeHtml(savedRoute.name)}</strong>
-              ${activeLabel}
+              ${currentLabel}
             </div>
             <div class="saved-route-meta-grid" data-testid="saved-route-meta">
               <span><b>Activity</b>${formatActivityType(savedRoute.activityType)}</span>
@@ -512,6 +519,7 @@ function saveCurrentRoute({ asCopy = false } = {}) {
   }
 
   activeSavedRouteId = savedRoute.id;
+  selectedSavedRouteId = savedRoute.id;
   routeDirty = false;
   persistLibrary();
   renderRoute();
@@ -538,8 +546,17 @@ function removeSavedRoute(savedRouteId) {
     activeSavedRouteId = null;
     routeDirty = true;
   }
+  if (selectedSavedRouteId === savedRouteId) {
+    selectedSavedRouteId = null;
+  }
   persistLibrary();
   renderRoute();
+}
+
+function selectSavedRoute(savedRouteId) {
+  if (!getSavedRoute(routeLibrary, savedRouteId)) return;
+  selectedSavedRouteId = savedRouteId;
+  renderLibraryList();
 }
 
 function startNewRoute() {
@@ -710,6 +727,7 @@ function confirmLibraryImport() {
   const importedLibrary = pendingLibraryImport.library;
   routeLibrary = importedLibrary;
   activeSavedRouteId = null;
+  selectedSavedRouteId = null;
   routeDirty = true;
   pendingLibraryImport = null;
   persistLibrary();
@@ -961,7 +979,23 @@ elements.savedRouteList.addEventListener("click", (event) => {
   const deleteButton = event.target.closest("[data-delete-route]");
   if (deleteButton) {
     removeSavedRoute(deleteButton.dataset.deleteRoute);
+    return;
   }
+
+  const routeRow = event.target.closest("[data-saved-route-id]");
+  if (routeRow) {
+    selectSavedRoute(routeRow.dataset.savedRouteId);
+  }
+});
+
+elements.savedRouteList.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+
+  const routeRow = event.target.closest("[data-saved-route-id]");
+  if (!routeRow) return;
+
+  event.preventDefault();
+  selectSavedRoute(routeRow.dataset.savedRouteId);
 });
 
 window.addEventListener("resize", updateDeviceStatus);

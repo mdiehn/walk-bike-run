@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make saved route rows selectable without loading a different route.
+
 - Add saved route library sort and activity filter controls.
 - Keep saved order as the default library view while allowing temporary display sorting by name, distance, point count, updated date, or activity.
 - Add route library view helper tests and Playwright assertions for sort/filter behavior.

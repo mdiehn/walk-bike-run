@@ -312,9 +312,18 @@ select:focus {
   gap: 0.55rem;
 }
 
-.saved-route-row.is-active {
+.saved-route-row.is-selected {
   border-color: #1f6feb;
   background: #eef6ff;
+}
+
+.saved-route-row.is-current:not(.is-selected) {
+  border-color: #8c959f;
+}
+
+.saved-route-row:focus-visible {
+  outline: 3px solid #1f6feb;
+  outline-offset: 2px;
 }
 
 .saved-route-main {
@@ -359,7 +368,7 @@ select:focus {
   font-size: 0.85rem;
 }
 
-.active-route-label {
+.current-route-label {
   align-self: flex-start;
   background: #1f6feb;
   border-radius: 999px;
