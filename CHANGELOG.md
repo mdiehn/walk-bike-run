@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add app JSON export/import for the current route.
+- Stage current-route JSON imports before replacing the editor route.
+- Add route file validation, unit tests, docs, and Playwright coverage.
+
 - Stage JSON library imports for review before replacing saved routes.
 - Add import cancel/confirm coverage to Playwright tests.
 - Add app JSON export/import for saved route library backups.

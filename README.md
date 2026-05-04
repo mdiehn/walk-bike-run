@@ -22,6 +22,7 @@ The app currently:
 - saves routes to a local browser route library
 - loads, duplicates, and deletes saved local routes
 - keeps saved route order stable when routes are re-saved
+- exports and imports the current route as app JSON
 - exports and imports the saved route library as app JSON backups
 - has unit and Playwright smoke tests
 
@@ -82,13 +83,16 @@ That means:
 - use **Export JSON** to back up saved routes
 - use **Import JSON** to replace the current saved route library with a backup
 
-## Library backups
+## Route files and library backups
 
-The JSON export/import feature is an app backup format, not GPX. It is meant to keep saved local routes safe while the app is still young.
+The JSON export/import features are app formats, not GPX.
 
-Importing a backup stages a preview first. Press **Replace library** to replace the current saved route library. It does not merge routes yet.
+- **Export current route JSON** saves just the route currently shown in the editor.
+- **Import current route JSON** stages one route for review, then can replace the current editor route.
+- **Export JSON** under Library backup saves the whole local route library.
+- **Import JSON** under Library backup stages a full library replacement for review.
 
-See [docs/library-backups.md](docs/library-backups.md).
+See [docs/route-files.md](docs/route-files.md) and [docs/library-backups.md](docs/library-backups.md).
 
 ## Version
 

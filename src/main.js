@@ -28,6 +28,7 @@ import {
   parseRouteLibraryBackup,
   serializeRouteLibraryBackup,
 } from "./route-backup.js";
+import { parseRouteFile, serializeRouteFile } from "./route-file.js";
 import { APP_VERSION } from "./version.js";
 
 const INITIAL_CENTER = [43.6426, -72.2518];
@@ -37,6 +38,7 @@ let route = createRoute({ name: "New route", activityType: "walk" });
 let routeLibrary = loadRouteLibrary();
 let activeSavedRouteId = null;
 let routeDirty = false;
+let pendingRouteImport = null;
 let pendingLibraryImport = null;
 let map;
 let pointLayer;
@@ -113,6 +115,23 @@ app.innerHTML = `
         </section>
 
         <section class="panel-section">
+          <h2>Route file</h2>
+          <div class="button-row">
+            <button id="exportCurrentRoute" type="button" class="secondary">Export current route JSON</button>
+            <button id="importCurrentRouteButton" type="button" class="secondary">Import current route JSON</button>
+            <input id="importCurrentRouteFile" class="sr-only" type="file" accept="application/json,.json" />
+          </div>
+          <p id="routeFileStatus" class="hint-text" data-testid="route-file-status">Export or import one route as app JSON.</p>
+          <div id="routeImportPreview" class="import-preview is-hidden" data-testid="route-import-preview" hidden>
+            <p id="routeImportPreviewText"></p>
+            <div class="button-row">
+              <button id="confirmImportCurrentRoute" type="button">Replace current route</button>
+              <button id="cancelImportCurrentRoute" type="button" class="secondary">Cancel route import</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section">
           <h2>Library</h2>
           <div class="button-row">
             <button id="saveRoute" type="button">Save route</button>
@@ -164,6 +183,16 @@ const elements = {
   saveRoute: document.querySelector("#saveRoute"),
   saveRouteCopy: document.querySelector("#saveRouteCopy"),
   newRoute: document.querySelector("#newRoute"),
+  exportCurrentRoute: document.querySelector("#exportCurrentRoute"),
+  importCurrentRouteButton: document.querySelector("#importCurrentRouteButton"),
+  importCurrentRouteFile: document.querySelector("#importCurrentRouteFile"),
+  routeImportPreview: document.querySelector("#routeImportPreview"),
+  routeImportPreviewText: document.querySelector("#routeImportPreviewText"),
+  confirmImportCurrentRoute: document.querySelector(
+    "#confirmImportCurrentRoute",
+  ),
+  cancelImportCurrentRoute: document.querySelector("#cancelImportCurrentRoute"),
+  routeFileStatus: document.querySelector("#routeFileStatus"),
   exportLibrary: document.querySelector("#exportLibrary"),
   importLibraryButton: document.querySelector("#importLibraryButton"),
   importLibraryFile: document.querySelector("#importLibraryFile"),
@@ -419,6 +448,79 @@ function startNewRoute() {
   );
 }
 
+function exportCurrentRouteJson() {
+  const json = serializeRouteFile(route, {
+    appVersion: APP_VERSION,
+  });
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const dateStamp = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `${slugify(route.name)}-${dateStamp}.wbr-route.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  elements.routeFileStatus.textContent = `Exported current route: ${route.name}.`;
+}
+
+async function stageCurrentRouteImport(file) {
+  if (!file) return;
+
+  try {
+    const importedRoute = parseRouteFile(await file.text());
+    pendingRouteImport = {
+      fileName: file.name || "selected file",
+      route: importedRoute,
+    };
+    renderRouteImportPreview();
+    elements.routeFileStatus.textContent =
+      "Review the route import before replacing the current route.";
+  } catch (error) {
+    pendingRouteImport = null;
+    renderRouteImportPreview();
+    elements.routeFileStatus.textContent = error.message;
+  }
+}
+
+function confirmCurrentRouteImport() {
+  if (!pendingRouteImport) return;
+
+  const importedRoute = pendingRouteImport.route;
+  pendingRouteImport = null;
+  setRoute(importedRoute, { savedRouteId: null, dirty: true });
+  renderRouteImportPreview();
+  fitRouteToMap();
+  elements.routeFileStatus.textContent = `Imported route: ${route.name}.`;
+}
+
+function cancelCurrentRouteImport() {
+  pendingRouteImport = null;
+  renderRouteImportPreview();
+  elements.routeFileStatus.textContent = "Route import canceled.";
+}
+
+function renderRouteImportPreview() {
+  if (!pendingRouteImport) {
+    elements.routeImportPreview.hidden = true;
+    elements.routeImportPreview.classList.add("is-hidden");
+    elements.routeImportPreviewText.textContent = "";
+    elements.confirmImportCurrentRoute.disabled = true;
+    elements.cancelImportCurrentRoute.disabled = true;
+    return;
+  }
+
+  const importedRoute = pendingRouteImport.route;
+  elements.routeImportPreview.hidden = false;
+  elements.routeImportPreview.classList.remove("is-hidden");
+  elements.confirmImportCurrentRoute.disabled = false;
+  elements.cancelImportCurrentRoute.disabled = false;
+  elements.routeImportPreviewText.textContent = `${pendingRouteImport.fileName} contains "${importedRoute.name}" with ${importedRoute.points.length} point${importedRoute.points.length === 1 ? "" : "s"}. Replacing will overwrite the current unsaved route view, but it will not change saved library routes.`;
+}
+
 function exportLibraryJson() {
   const json = serializeRouteLibraryBackup(routeLibrary, {
     appVersion: APP_VERSION,
@@ -526,6 +628,16 @@ function formatActivityType(activityType) {
   return activityType.charAt(0).toUpperCase() + activityType.slice(1);
 }
 
+function slugify(value) {
+  return (
+    String(value ?? "route")
+      .trim()
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-|-$/g, "") || "route"
+  );
+}
+
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "short",
@@ -578,6 +690,22 @@ elements.saveRouteCopy.addEventListener("click", () =>
   saveCurrentRoute({ asCopy: true }),
 );
 elements.newRoute.addEventListener("click", startNewRoute);
+elements.exportCurrentRoute.addEventListener("click", exportCurrentRouteJson);
+elements.importCurrentRouteButton.addEventListener("click", () =>
+  elements.importCurrentRouteFile.click(),
+);
+elements.importCurrentRouteFile.addEventListener("change", async (event) => {
+  await stageCurrentRouteImport(event.target.files?.[0]);
+  event.target.value = "";
+});
+elements.confirmImportCurrentRoute.addEventListener(
+  "click",
+  confirmCurrentRouteImport,
+);
+elements.cancelImportCurrentRoute.addEventListener(
+  "click",
+  cancelCurrentRouteImport,
+);
 elements.exportLibrary.addEventListener("click", exportLibraryJson);
 elements.importLibraryButton.addEventListener("click", () =>
   elements.importLibraryFile.click(),
@@ -639,5 +767,6 @@ window.addEventListener("resize", updateDeviceStatus);
 
 initMap();
 updateDeviceStatus();
+renderRouteImportPreview();
 renderImportPreview();
 renderRoute();
