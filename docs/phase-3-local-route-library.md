@@ -31,14 +31,18 @@ This keeps the first implementation small and easy to inspect.
 
 Saved route objects currently carry `schemaVersion: 1`. The route data model is not final; saved routes are normalized through `route-library.js` so future changes can be migrated in one place.
 
-## Library order
+## Library order and display controls
 
-The library keeps a stable display order instead of sorting by update date automatically.
+The library keeps a stable saved order by default instead of sorting by update date automatically.
 
 - Re-saving an existing route updates it in place.
 - Newly saved routes appear at the top of the list for now.
 - Duplicated routes appear next to the source route.
 - Deleting a route does not reorder the remaining routes.
+- The visible list can be sorted temporarily by name, distance, point count, updated date, or activity.
+- The visible list can be filtered by activity.
+
+These controls only change the displayed order. They do not rewrite the saved route library order.
 
 ## Backup/import
 
@@ -50,15 +54,14 @@ See [library-backups.md](library-backups.md).
 
 - No cross-device sync.
 - No backend.
-- No GPX import/export.
+- No cross-device GPX/activity history sync.
 - No full schema migration helper beyond the current normalization logic.
-- No custom sort controls yet.
 - No usage history or best-time tracking yet.
 
 ## Next library work
 
 - Add confirmation or undo for delete/clear actions.
 - Consider merge behavior for JSON import once the library UI is more mature.
-- Add route search/filter once there are enough saved routes to need it.
-- Add optional sorting by name, distance, point count, created date, updated date, last used date, or usage count.
+- Add route name search once there are enough saved routes to need it.
+- Add optional sorting by created date, last used date, usage count, or best time after those fields exist.
 - Add activity history fields later, such as last used, use count, best time, and recent times.

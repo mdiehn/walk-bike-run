@@ -23,6 +23,7 @@ The app currently:
 - saves routes to a local browser route library
 - loads, duplicates, and deletes saved local routes
 - shows saved route activity, distance, point count, estimate, and updated date
+- sorts and filters the saved route library view
 - tracks whether the current route has unsaved changes
 - confirms before destructive actions discard unsaved route edits
 - keeps saved route order stable when routes are re-saved
@@ -87,6 +88,8 @@ That means:
 - there is no account sync yet
 - use **Export JSON** to back up saved routes
 - use **Import JSON** to stage and review a saved-library replacement
+- sort the visible library by saved order, name, distance, point count, updated date, or activity
+- filter the visible library by activity
 
 ## Route files and library backups
 
@@ -99,7 +102,7 @@ Current-route export/import supports both the app JSON route format and GPX.
 - **Export JSON** under Library backup saves the whole local route library.
 - **Import JSON** under Library backup stages a full library replacement for review.
 
-See [docs/route-files.md](docs/route-files.md), [docs/library-backups.md](docs/library-backups.md), and [docs/route-stats.md](docs/route-stats.md).
+See [docs/route-files.md](docs/route-files.md), [docs/library-backups.md](docs/library-backups.md), [docs/library-controls.md](docs/library-controls.md), and [docs/route-stats.md](docs/route-stats.md).
 
 ## Version
 

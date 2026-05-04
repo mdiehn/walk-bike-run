@@ -32,6 +32,7 @@ import {
 } from "./route-backup.js";
 import { parseRouteFile, serializeRouteFile } from "./route-file.js";
 import { parseRouteGpx, serializeRouteGpx } from "./gpx.js";
+import { getVisibleSavedRoutes } from "./route-library-view.js";
 import { APP_VERSION } from "./version.js";
 
 const INITIAL_CENTER = [43.6426, -72.2518];
@@ -39,6 +40,8 @@ const INITIAL_ZOOM = 13;
 
 let route = createRoute({ name: "New route", activityType: "walk" });
 let routeLibrary = loadRouteLibrary();
+let librarySortBy = "saved";
+let libraryActivityFilter = "all";
 let activeSavedRouteId = null;
 let routeDirty = false;
 let pendingRouteImport = null;
@@ -157,6 +160,29 @@ app.innerHTML = `
             <button id="saveRouteCopy" type="button" class="secondary">Save as copy</button>
             <button id="newRoute" type="button" class="secondary">New route</button>
           </div>
+          <div class="library-controls" aria-label="Saved route list controls">
+            <label class="field-row compact-field">
+              <span>Sort</span>
+              <select id="librarySortBy" data-testid="library-sort-by">
+                <option value="saved">Saved order</option>
+                <option value="name">Name A-Z</option>
+                <option value="distance">Distance longest first</option>
+                <option value="points">Points most first</option>
+                <option value="updated">Updated newest first</option>
+                <option value="activity">Activity</option>
+              </select>
+            </label>
+            <label class="field-row compact-field">
+              <span>Activity filter</span>
+              <select id="libraryActivityFilter" data-testid="library-activity-filter">
+                <option value="all">All activities</option>
+                <option value="walk">Walk</option>
+                <option value="bike">Bike</option>
+                <option value="run">Run</option>
+              </select>
+            </label>
+          </div>
+          <p id="libraryStatus" class="hint-text" data-testid="library-status">No saved routes yet.</p>
           <ol id="savedRouteList" class="saved-route-list" data-testid="saved-route-list"></ol>
         </section>
 
@@ -229,6 +255,9 @@ const elements = {
   confirmImportLibrary: document.querySelector("#confirmImportLibrary"),
   cancelImportLibrary: document.querySelector("#cancelImportLibrary"),
   backupStatus: document.querySelector("#backupStatus"),
+  librarySortBy: document.querySelector("#librarySortBy"),
+  libraryActivityFilter: document.querySelector("#libraryActivityFilter"),
+  libraryStatus: document.querySelector("#libraryStatus"),
   savedRouteList: document.querySelector("#savedRouteList"),
   pointList: document.querySelector("#pointList"),
 };
@@ -346,13 +375,30 @@ function renderPointList() {
 }
 
 function renderLibraryList() {
+  const visibleRoutes = getVisibleSavedRoutes(routeLibrary, {
+    activityFilter: libraryActivityFilter,
+    sortBy: librarySortBy,
+  });
+
+  elements.librarySortBy.value = librarySortBy;
+  elements.libraryActivityFilter.value = libraryActivityFilter;
+  elements.libraryStatus.textContent = formatLibraryStatus(
+    visibleRoutes.length,
+  );
+
   if (routeLibrary.length === 0) {
     elements.savedRouteList.innerHTML =
       '<li class="empty-row">No saved routes yet.</li>';
     return;
   }
 
-  elements.savedRouteList.innerHTML = routeLibrary
+  if (visibleRoutes.length === 0) {
+    elements.savedRouteList.innerHTML =
+      '<li class="empty-row">No saved routes match this filter.</li>';
+    return;
+  }
+
+  elements.savedRouteList.innerHTML = visibleRoutes
     .map((savedRoute) => {
       const isActive = savedRoute.id === activeSavedRouteId;
       const activeLabel = isActive
@@ -363,7 +409,7 @@ function renderLibraryList() {
         <li class="saved-route-row ${isActive ? "is-active" : ""}" data-saved-route-id="${escapeAttr(savedRoute.id)}" data-testid="saved-route-row">
           <div class="saved-route-main">
             <div class="saved-route-title-row">
-              <strong>${escapeHtml(savedRoute.name)}</strong>
+              <strong data-testid="saved-route-name">${escapeHtml(savedRoute.name)}</strong>
               ${activeLabel}
             </div>
             <div class="saved-route-meta-grid" data-testid="saved-route-meta">
@@ -701,6 +747,21 @@ function persistLibrary() {
   saveRouteLibrary(routeLibrary);
 }
 
+function formatLibraryStatus(visibleCount) {
+  if (routeLibrary.length === 0) return "No saved routes yet.";
+
+  const routeText = `${visibleCount} of ${routeLibrary.length} saved route${routeLibrary.length === 1 ? "" : "s"}`;
+  const filterText =
+    libraryActivityFilter === "all"
+      ? "all activities"
+      : formatActivityType(libraryActivityFilter);
+  const sortText =
+    elements.librarySortBy.options[elements.librarySortBy.selectedIndex]
+      ?.textContent ?? "saved order";
+
+  return `${routeText} shown. Filter: ${filterText}. Sort: ${sortText}.`;
+}
+
 function getSaveStatusText() {
   if (!activeSavedRouteId) return "New unsaved route";
   return routeDirty ? "Unsaved changes" : "Saved";
@@ -814,6 +875,14 @@ elements.saveRouteCopy.addEventListener("click", () =>
   saveCurrentRoute({ asCopy: true }),
 );
 elements.newRoute.addEventListener("click", startNewRoute);
+elements.librarySortBy.addEventListener("change", (event) => {
+  librarySortBy = event.target.value;
+  renderRoute();
+});
+elements.libraryActivityFilter.addEventListener("change", (event) => {
+  libraryActivityFilter = event.target.value;
+  renderRoute();
+});
 elements.exportCurrentRoute.addEventListener("click", exportCurrentRouteJson);
 elements.importCurrentRouteButton.addEventListener("click", () =>
   elements.importCurrentRouteFile.click(),

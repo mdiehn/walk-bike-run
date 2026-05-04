@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add saved route library sort and activity filter controls.
+- Keep saved order as the default library view while allowing temporary display sorting by name, distance, point count, updated date, or activity.
+- Add route library view helper tests and Playwright assertions for sort/filter behavior.
+
 - Guard against accidentally discarding unsaved route edits.
 - Confirm before clearing, starting a new route, loading a saved route, or replacing the current route from import when unsaved changes exist.
 - Simplify save status labels to `New unsaved route`, `Unsaved changes`, and `Saved`.

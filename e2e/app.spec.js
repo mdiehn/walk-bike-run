@@ -25,9 +25,9 @@ test("updates route stats when activity changes", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByTestId("pace-text")).toHaveText("20:00 / mi");
-  await page.getByLabel("Activity").selectOption("run");
+  await page.locator("#activityType").selectOption("run");
   await expect(page.getByTestId("pace-text")).toHaveText("10:00 / mi");
-  await page.getByLabel("Activity").selectOption("bike");
+  await page.locator("#activityType").selectOption("bike");
   await expect(page.getByTestId("pace-text")).toHaveText("12.0 mph");
 });
 
@@ -342,6 +342,104 @@ test("confirms route library JSON import replacement", async ({ page }) => {
     "Replace this route",
   );
 });
+
+test("sorts and filters saved routes in the library", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "walk-bike-run.routeLibrary.v1",
+      JSON.stringify([
+        createSavedRouteStorageEntry({
+          id: "run-route",
+          name: "Zoo run",
+          activityType: "run",
+          updatedAt: "2026-05-03T12:00:00.000Z",
+          points: [
+            { id: "run-a", name: "Start", lat: 43, lng: -72 },
+            { id: "run-b", name: "End", lat: 43.02, lng: -72 },
+          ],
+        }),
+        createSavedRouteStorageEntry({
+          id: "walk-route",
+          name: "Apple walk",
+          activityType: "walk",
+          updatedAt: "2026-05-03T13:00:00.000Z",
+          points: [{ id: "walk-a", name: "Start", lat: 43, lng: -72 }],
+        }),
+        createSavedRouteStorageEntry({
+          id: "bike-route",
+          name: "Bike loop",
+          activityType: "bike",
+          updatedAt: "2026-05-03T14:00:00.000Z",
+          points: [
+            { id: "bike-a", name: "Start", lat: 43, lng: -72 },
+            { id: "bike-b", name: "Middle", lat: 43.08, lng: -72 },
+            { id: "bike-c", name: "End", lat: 43.16, lng: -72 },
+          ],
+        }),
+      ]),
+    );
+
+    function createSavedRouteStorageEntry({
+      id,
+      name,
+      activityType,
+      updatedAt,
+      points,
+    }) {
+      return {
+        schemaVersion: 1,
+        id,
+        name,
+        activityType,
+        loop: false,
+        points,
+        distanceMeters: 0,
+        createdAt: updatedAt,
+        updatedAt,
+      };
+    }
+  });
+
+  await page.goto("/");
+
+  expect(await savedRouteNames(page)).toEqual([
+    "Zoo run",
+    "Apple walk",
+    "Bike loop",
+  ]);
+  await expect(page.getByTestId("library-status")).toContainText(
+    "3 of 3 saved routes shown",
+  );
+
+  await page.getByTestId("library-sort-by").selectOption("name");
+  expect(await savedRouteNames(page)).toEqual([
+    "Apple walk",
+    "Bike loop",
+    "Zoo run",
+  ]);
+
+  await page.getByTestId("library-sort-by").selectOption("points");
+  expect(await savedRouteNames(page)).toEqual([
+    "Bike loop",
+    "Zoo run",
+    "Apple walk",
+  ]);
+
+  await page.getByTestId("library-activity-filter").selectOption("bike");
+  expect(await savedRouteNames(page)).toEqual(["Bike loop"]);
+  await expect(page.getByTestId("library-status")).toContainText(
+    "1 of 3 saved routes shown",
+  );
+  await expect(page.getByTestId("saved-route-list")).not.toContainText(
+    "Apple walk",
+  );
+});
+
+async function savedRouteNames(page) {
+  return page
+    .getByTestId("saved-route-name")
+    .evaluateAll((nodes) => nodes.map((node) => node.textContent));
+}
 
 function createRouteLibraryBackupFixture(routeName) {
   return {

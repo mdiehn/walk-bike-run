@@ -45,7 +45,6 @@ Important limits:
 ## Good next steps
 
 1. Improve mobile layout for the route editor and library.
-2. Add library sorting/filtering once the display shape is clearer.
-3. Add drag-to-reorder in the list or keep up/down buttons if that feels better.
-4. Add GeoJSON support if it proves useful.
-5. Add a routing provider adapter after the manual route model feels solid.
+2. Add drag-to-reorder in the list or keep up/down buttons if that feels better.
+3. Add GeoJSON support if it proves useful.
+4. Add a routing provider adapter after the manual route model feels solid.
