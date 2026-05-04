@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Clarify saved-route selection vs loaded/current route behavior.
+- Move saved-route Load, Copy, Delete actions into selected-route controls.
+- Rename current-route save actions to make overwrite vs save-as-new behavior clearer.
+- Document future destination/share support for route exports and library backups.
+
 - Make saved route rows selectable without loading a different route.
 
 - Add saved route library sort and activity filter controls.

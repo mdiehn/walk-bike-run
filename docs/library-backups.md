@@ -43,3 +43,14 @@ GPX can come later as a portable route/activity format.
 Saved route entries currently use `schemaVersion: 1`.
 
 The import path normalizes routes through `src/route-library.js`. Future route model migrations should happen there instead of scattering migration logic around the UI.
+
+## Choosing backup destinations later
+
+For now, library backup export uses the browser download flow. The app suggests a filename, and the browser decides where the file goes based on browser settings.
+
+Later we should add better destination support for backups, especially because backups protect local-only saved routes. Possible approaches:
+
+- browser file picker/save dialog where supported
+- share sheet integration where supported
+- user-configured backup reminder/destination notes
+- clearer filename previews before export

@@ -90,10 +90,15 @@ That means:
 - use **Import JSON** to stage and review a saved-library replacement
 - sort the visible library by saved order, name, distance, point count, updated date, or activity
 - filter the visible library by activity
+- select saved route rows without loading them
+- use **Load selected**, **Copy selected**, and **Delete selected** for saved-row actions
+- use **Save changes** to update the loaded route, or **Save as new** to create a separate saved route
 
 ## Route files and library backups
 
 Current-route export/import supports both the app JSON route format and GPX.
+
+Exports currently use the browser download flow. Better destination/share controls are planned for later.
 
 - **Export current route JSON** saves just the route currently shown in the editor using the app format.
 - **Import current route JSON** stages one app route file for review, then can replace the current editor route. If the current route has unsaved changes, the app asks for confirmation before replacing it.

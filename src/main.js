@@ -158,9 +158,10 @@ app.innerHTML = `
           <h2>Library</h2>
           <div class="button-row">
             <button id="saveRoute" type="button">Save route</button>
-            <button id="saveRouteCopy" type="button" class="secondary">Save as copy</button>
+            <button id="saveRouteAsNew" type="button" class="secondary">Save as new</button>
             <button id="newRoute" type="button" class="secondary">New route</button>
           </div>
+          <p class="hint-text">Save changes updates the loaded route. Save as new always creates a separate saved route.</p>
           <div class="library-controls" aria-label="Saved route list controls">
             <label class="field-row compact-field">
               <span>Sort</span>
@@ -184,6 +185,15 @@ app.innerHTML = `
             </label>
           </div>
           <p id="libraryStatus" class="hint-text" data-testid="library-status">No saved routes yet.</p>
+          <div class="selected-route-controls" aria-label="Selected saved route actions">
+            <p id="selectedRouteStatus" class="selected-route-status" data-testid="selected-route-status">No saved route selected.</p>
+            <div class="button-row">
+              <button id="loadSelectedRoute" type="button" class="secondary">Load selected</button>
+              <button id="copySelectedRoute" type="button" class="secondary">Copy selected</button>
+              <button id="deleteSelectedRoute" type="button" class="danger">Delete selected</button>
+              <button id="clearSelectedRoute" type="button" class="secondary">Clear selection</button>
+            </div>
+          </div>
           <ol id="savedRouteList" class="saved-route-list" data-testid="saved-route-list"></ol>
         </section>
 
@@ -229,7 +239,7 @@ const elements = {
   fitRoute: document.querySelector("#fitRoute"),
   clearPoints: document.querySelector("#clearPoints"),
   saveRoute: document.querySelector("#saveRoute"),
-  saveRouteCopy: document.querySelector("#saveRouteCopy"),
+  saveRouteAsNew: document.querySelector("#saveRouteAsNew"),
   newRoute: document.querySelector("#newRoute"),
   exportCurrentRoute: document.querySelector("#exportCurrentRoute"),
   importCurrentRouteButton: document.querySelector("#importCurrentRouteButton"),
@@ -259,6 +269,11 @@ const elements = {
   librarySortBy: document.querySelector("#librarySortBy"),
   libraryActivityFilter: document.querySelector("#libraryActivityFilter"),
   libraryStatus: document.querySelector("#libraryStatus"),
+  selectedRouteStatus: document.querySelector("#selectedRouteStatus"),
+  loadSelectedRoute: document.querySelector("#loadSelectedRoute"),
+  copySelectedRoute: document.querySelector("#copySelectedRoute"),
+  deleteSelectedRoute: document.querySelector("#deleteSelectedRoute"),
+  clearSelectedRoute: document.querySelector("#clearSelectedRoute"),
   savedRouteList: document.querySelector("#savedRouteList"),
   pointList: document.querySelector("#pointList"),
 };
@@ -342,6 +357,9 @@ function renderRoute() {
   );
   elements.paceText.textContent = formatDefaultPace(route.activityType);
   elements.saveStatus.textContent = getSaveStatusText();
+  elements.saveRoute.textContent = activeSavedRouteId
+    ? "Save changes"
+    : "Save route";
 }
 
 function renderRouteFields() {
@@ -391,6 +409,7 @@ function renderLibraryList() {
   elements.libraryStatus.textContent = formatLibraryStatus(
     visibleRoutes.length,
   );
+  renderSelectedRouteControls();
 
   if (routeLibrary.length === 0) {
     elements.savedRouteList.innerHTML =
@@ -427,15 +446,26 @@ function renderLibraryList() {
             </div>
             <span class="saved-route-updated" data-testid="saved-route-updated">Updated <time datetime="${escapeAttr(savedRoute.updatedAt)}">${formatDate(savedRoute.updatedAt)}</time></span>
           </div>
-          <div class="saved-route-actions">
-            <button type="button" class="small-button secondary" data-load-route="${escapeAttr(savedRoute.id)}">Load</button>
-            <button type="button" class="small-button secondary" data-copy-route="${escapeAttr(savedRoute.id)}">Copy</button>
-            <button type="button" class="small-button danger" data-delete-route="${escapeAttr(savedRoute.id)}">Delete</button>
-          </div>
         </li>
       `;
     })
     .join("");
+}
+
+function renderSelectedRouteControls() {
+  const selectedRoute = selectedSavedRouteId
+    ? getSavedRoute(routeLibrary, selectedSavedRouteId)
+    : null;
+
+  const hasSelection = Boolean(selectedRoute);
+  elements.loadSelectedRoute.disabled = !hasSelection;
+  elements.copySelectedRoute.disabled = !hasSelection;
+  elements.deleteSelectedRoute.disabled = !hasSelection;
+  elements.clearSelectedRoute.disabled = !hasSelection;
+
+  elements.selectedRouteStatus.textContent = hasSelection
+    ? `Selected: ${selectedRoute.name}`
+    : "No saved route selected.";
 }
 
 function renderMapRoute() {
@@ -535,7 +565,12 @@ function loadSavedRoute(savedRouteId) {
 }
 
 function copySavedRoute(savedRouteId) {
+  const existingIds = new Set(routeLibrary.map((savedRoute) => savedRoute.id));
   routeLibrary = duplicateSavedRoute(routeLibrary, savedRouteId);
+  const copiedRoute = routeLibrary.find(
+    (savedRoute) => !existingIds.has(savedRoute.id),
+  );
+  if (copiedRoute) selectedSavedRouteId = copiedRoute.id;
   persistLibrary();
   renderRoute();
 }
@@ -556,6 +591,26 @@ function removeSavedRoute(savedRouteId) {
 function selectSavedRoute(savedRouteId) {
   if (!getSavedRoute(routeLibrary, savedRouteId)) return;
   selectedSavedRouteId = savedRouteId;
+  renderLibraryList();
+}
+
+function loadSelectedSavedRoute() {
+  if (!selectedSavedRouteId) return;
+  loadSavedRoute(selectedSavedRouteId);
+}
+
+function copySelectedSavedRoute() {
+  if (!selectedSavedRouteId) return;
+  copySavedRoute(selectedSavedRouteId);
+}
+
+function deleteSelectedSavedRoute() {
+  if (!selectedSavedRouteId) return;
+  removeSavedRoute(selectedSavedRouteId);
+}
+
+function clearSavedRouteSelection() {
+  selectedSavedRouteId = null;
   renderLibraryList();
 }
 
@@ -889,10 +944,17 @@ elements.loopToggle.addEventListener("change", (event) => {
 });
 
 elements.saveRoute.addEventListener("click", () => saveCurrentRoute());
-elements.saveRouteCopy.addEventListener("click", () =>
+elements.saveRouteAsNew.addEventListener("click", () =>
   saveCurrentRoute({ asCopy: true }),
 );
 elements.newRoute.addEventListener("click", startNewRoute);
+elements.loadSelectedRoute.addEventListener("click", loadSelectedSavedRoute);
+elements.copySelectedRoute.addEventListener("click", copySelectedSavedRoute);
+elements.deleteSelectedRoute.addEventListener(
+  "click",
+  deleteSelectedSavedRoute,
+);
+elements.clearSelectedRoute.addEventListener("click", clearSavedRouteSelection);
 elements.librarySortBy.addEventListener("change", (event) => {
   librarySortBy = event.target.value;
   renderRoute();
@@ -964,24 +1026,6 @@ elements.pointList.addEventListener("change", (event) => {
 });
 
 elements.savedRouteList.addEventListener("click", (event) => {
-  const loadButton = event.target.closest("[data-load-route]");
-  if (loadButton) {
-    loadSavedRoute(loadButton.dataset.loadRoute);
-    return;
-  }
-
-  const copyButton = event.target.closest("[data-copy-route]");
-  if (copyButton) {
-    copySavedRoute(copyButton.dataset.copyRoute);
-    return;
-  }
-
-  const deleteButton = event.target.closest("[data-delete-route]");
-  if (deleteButton) {
-    removeSavedRoute(deleteButton.dataset.deleteRoute);
-    return;
-  }
-
   const routeRow = event.target.closest("[data-saved-route-id]");
   if (routeRow) {
     selectSavedRoute(routeRow.dataset.savedRouteId);

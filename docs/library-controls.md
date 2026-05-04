@@ -37,7 +37,30 @@ Likely future controls:
 - use-count sort
 - best-time or recent-time display once activity recording exists
 
-
 ## Saved route selection
 
 The saved route highlighted in the library is the selected library row. Clicking another saved route row moves the selection without loading it into the editor. The `Current` label still marks the saved route that is loaded in the editor.
+
+## Current route vs selected saved route
+
+The saved route library uses two related but separate ideas:
+
+- **Current** means the saved route currently loaded into the editor.
+- **Selected** means the saved library row highlighted for library actions.
+
+Clicking a saved route row selects it. It does not load that route into the editor.
+
+Use the selected-route buttons to act on the highlighted saved route:
+
+- **Load selected** loads it into the editor.
+- **Copy selected** creates a saved copy next to the source route.
+- **Delete selected** removes it from the library.
+- **Clear selection** removes the highlight without changing the current editor route.
+
+Current-route saving is controlled separately:
+
+- **Save route** saves a brand-new route.
+- **Save changes** updates the saved route currently loaded in the editor.
+- **Save as new** creates a separate saved route instead of overwriting the loaded route.
+
+The selected row does not control where **Save changes** writes. Loading a route is what makes it the save target.

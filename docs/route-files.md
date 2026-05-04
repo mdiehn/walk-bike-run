@@ -63,3 +63,14 @@ If the current route has unsaved changes, the app asks for confirmation before r
 Importing a current-route file replaces the route currently shown in the editor. It does not replace or merge the saved route library.
 
 Use **Cancel route import** to discard the staged import without changing the current route.
+
+## Choosing export destinations later
+
+For now, route export uses the browser download flow. The app suggests a filename, and the browser decides where the file goes based on browser settings.
+
+Later we should add a clearer destination/share flow for route exports, especially on mobile. Possible approaches:
+
+- browser file picker/save dialog where supported
+- share sheet integration where supported
+- user-configured default export behavior
+- clearer filename previews before export

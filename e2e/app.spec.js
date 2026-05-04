@@ -120,25 +120,26 @@ test("saves, loads, copies, and deletes routes in the local library", async ({
   await expect(page.getByLabel("Route name")).toHaveValue("New route");
 
   await page
-    .getByTestId("saved-route-list")
-    .getByRole("button", { name: "Load" })
+    .getByTestId("saved-route-row")
+    .filter({ hasText: "Library test walk" })
     .click();
+  await expect(page.getByTestId("selected-route-status")).toContainText(
+    "Selected: Library test walk",
+  );
+  await page.getByRole("button", { name: "Load selected" }).click();
   await expect(page.getByLabel("Route name")).toHaveValue("Library test walk");
   await expect(page.getByTestId("point-count")).toHaveText("1");
 
-  await page
-    .getByTestId("saved-route-list")
-    .getByRole("button", { name: "Copy" })
-    .click();
+  await page.getByRole("button", { name: "Copy selected" }).click();
   await expect(page.getByTestId("saved-route-list")).toContainText(
     "Library test walk copy",
   );
 
   await page
-    .getByTestId("saved-route-list")
-    .getByRole("button", { name: "Delete" })
-    .first()
+    .getByTestId("saved-route-row")
+    .filter({ hasText: "Library test walk copy" })
     .click();
+  await page.getByRole("button", { name: "Delete selected" }).click();
   await expect(page.getByTestId("saved-route-list")).toContainText(
     "Library test walk",
   );
@@ -160,6 +161,9 @@ test("selects saved route rows without loading them", async ({ page }) => {
   await expect(rows.filter({ hasText: "Second saved route" })).toHaveClass(
     /is-selected/,
   );
+  await expect(page.getByTestId("selected-route-status")).toContainText(
+    "Selected: Second saved route",
+  );
   await expect(rows.filter({ hasText: "First saved route" })).not.toHaveClass(
     /is-selected/,
   );
@@ -169,10 +173,21 @@ test("selects saved route rows without loading them", async ({ page }) => {
   await expect(rows.filter({ hasText: "First saved route" })).toHaveClass(
     /is-selected/,
   );
+  await expect(page.getByTestId("selected-route-status")).toContainText(
+    "Selected: First saved route",
+  );
   await expect(rows.filter({ hasText: "Second saved route" })).not.toHaveClass(
     /is-selected/,
   );
   await expect(page.getByLabel("Route name")).toHaveValue("Second saved route");
+
+  await page.getByRole("button", { name: "Clear selection" }).click();
+  await expect(page.getByTestId("selected-route-status")).toHaveText(
+    "No saved route selected.",
+  );
+  await expect(rows.filter({ hasText: "First saved route" })).not.toHaveClass(
+    /is-selected/,
+  );
 });
 
 test("shows route library backup controls", async ({ page }) => {

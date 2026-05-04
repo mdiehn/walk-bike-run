@@ -368,6 +368,21 @@ select:focus {
   font-size: 0.85rem;
 }
 
+.selected-route-controls {
+  background: #f6f8fa;
+  border: 1px solid #d8dee4;
+  border-radius: 0.8rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+}
+
+.selected-route-status {
+  color: #57606a;
+  font-size: 0.9rem;
+  font-weight: 800;
+  margin-bottom: 0.6rem;
+}
+
 .current-route-label {
   align-self: flex-start;
   background: #1f6feb;
