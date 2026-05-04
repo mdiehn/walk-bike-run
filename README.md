@@ -125,6 +125,8 @@ That writes `src/version.js` from `VERSION`.
 
 See [docs/mobile-testing.md](docs/mobile-testing.md).
 
+See [docs/v0.2.0-stabilization.md](docs/v0.2.0-stabilization.md) for the current release checklist.
+
 ## Not yet
 
 No service worker yet. No offline/PWA cache yet. Those come later, after update behavior is boring and predictable.

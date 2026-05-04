@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add v0.2.0 stabilization notes.
+- Fix e2e selector ambiguity for the route Clear button after adding Clear selection.
+
 - Clarify saved-route selection vs loaded/current route behavior.
 - Move saved-route Load, Copy, Delete actions into selected-route controls.
 - Rename current-route save actions to make overwrite vs save-as-new behavior clearer.

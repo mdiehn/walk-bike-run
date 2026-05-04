@@ -53,7 +53,7 @@ test("adds, renames, reorders, and clears route points", async ({ page }) => {
     expect(dialog.message()).toContain("Clear this route");
     await dialog.accept();
   });
-  await page.getByRole("button", { name: "Clear" }).click();
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
   await expect(page.getByTestId("point-count")).toHaveText("0");
   await expect(page.getByTestId("point-list")).toContainText("No points yet.");
 });
@@ -68,14 +68,14 @@ test("guards clearing unsaved route changes", async ({ page }) => {
     expect(dialog.message()).toContain("Clear this route");
     await dialog.dismiss();
   });
-  await page.getByRole("button", { name: "Clear" }).click();
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
   await expect(page.getByTestId("point-count")).toHaveText("1");
 
   page.once("dialog", async (dialog) => {
     expect(dialog.message()).toContain("Clear this route");
     await dialog.accept();
   });
-  await page.getByRole("button", { name: "Clear" }).click();
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
   await expect(page.getByTestId("point-count")).toHaveText("0");
 });
 
