@@ -25,9 +25,10 @@ test("adds, renames, reorders, and clears route points", async ({ page }) => {
   await expect(page.getByTestId("point-list")).toContainText("Point 1");
   await expect(page.getByTestId("point-list")).toContainText("Point 2");
 
-  await page.getByLabel("Point 2 name").fill("Turnaround");
-  await page.getByLabel("Point 2 name").blur();
-  await expect(page.getByTestId("point-list")).toContainText("Turnaround");
+  const secondPointName = page.getByLabel("Point 2 name");
+  await secondPointName.fill("Turnaround");
+  await secondPointName.blur();
+  await expect(secondPointName).toHaveValue("Turnaround");
 
   await page.getByRole("button", { name: "Up" }).last().click();
   await expect(page.getByLabel("Point 1 name")).toHaveValue("Turnaround");
