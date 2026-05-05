@@ -1,425 +1,407 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from '@playwright/test';
 
-test("loads the route editor shell", async ({ page }) => {
-  await page.goto("/");
+test('loads the route editor shell', async ({ page }) => {
+  await page.goto('/');
 
   await expect(page).toHaveTitle(/Walk Bike Run/);
   await expect(
-    page.getByRole("heading", { name: "Build a route." }),
+    page.getByRole('heading', { name: 'Build a route.' }),
   ).toBeVisible();
-  await expect(page.getByTestId("map")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Route list" })).toBeVisible();
-  await expect(page.getByTestId("distance-text")).toHaveText("0.00 mi");
-  await expect(page.getByTestId("estimated-time")).toHaveText("0 min");
-  await expect(page.getByTestId("pace-text")).toHaveText("20:00 / mi");
-  await expect(page.getByRole("heading", { name: "Route file" })).toBeVisible();
+  await expect(page.getByTestId('map')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Route list' })).toBeVisible();
+  await expect(page.getByTestId('distance-text')).toHaveText('0.00 mi');
+  await expect(page.getByTestId('estimated-time')).toHaveText('0m');
+  await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
+  await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Library", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Library backup" }),
+    page.getByRole('heading', { name: 'Current route backup' }),
   ).toBeVisible();
 });
 
-test("updates route stats when activity changes", async ({ page }) => {
-  await page.goto("/");
+test('updates route stats when activity changes', async ({ page }) => {
+  await page.goto('/');
 
-  await expect(page.getByTestId("pace-text")).toHaveText("20:00 / mi");
-  await page.locator("#activityType").selectOption("run");
-  await expect(page.getByTestId("pace-text")).toHaveText("10:00 / mi");
-  await page.locator("#activityType").selectOption("bike");
-  await expect(page.getByTestId("pace-text")).toHaveText("12.0 mph");
+  await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
+  await page.locator('#activityType').selectOption('run');
+  await expect(page.getByTestId('pace-text')).toHaveText('10:00 m/mi');
+  await page.locator('#activityType').selectOption('bike');
+  await expect(page.getByTestId('pace-text')).toHaveText('12.0 mph');
 });
 
-test("adds, renames, reorders, and clears route points", async ({ page }) => {
-  await page.goto("/");
+test('adds, renames, reorders, and clears route points', async ({ page }) => {
+  await page.goto('/');
 
-  await page.getByRole("button", { name: "Add point at map center" }).click();
-  await page.getByRole("button", { name: "Add point at map center" }).click();
+  await addPointAtMap(page);
+  await addPointAtMap(page);
 
-  await expect(page.getByTestId("point-count")).toHaveText("2");
-  await expect(page.getByTestId("point-list")).toContainText("Point 1");
-  await expect(page.getByTestId("point-list")).toContainText("Point 2");
+  await expect(page.getByTestId('point-count')).toHaveText('2');
+  await expect(page.getByTestId('point-list')).toContainText('Point 1');
+  await expect(page.getByTestId('point-list')).toContainText('Point 2');
 
-  const secondPointName = page.getByLabel("Point 2 name");
-  await secondPointName.fill("Turnaround");
+  const secondPointName = page.getByLabel('Point 2 name');
+  await secondPointName.fill('Turnaround');
   await secondPointName.blur();
-  await expect(secondPointName).toHaveValue("Turnaround");
+  await expect(secondPointName).toHaveValue('Turnaround');
 
-  await page.getByRole("button", { name: "Up" }).last().click();
-  await expect(page.getByLabel("Point 1 name")).toHaveValue("Turnaround");
+  await page.getByRole('button', { name: 'Up' }).last().click();
+  await expect(page.getByLabel('Point 1 name')).toHaveValue('Turnaround');
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Clear this route");
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Clear this route');
     await dialog.accept();
   });
-  await page.getByRole("button", { name: "Clear", exact: true }).click();
-  await expect(page.getByTestId("point-count")).toHaveText("0");
-  await expect(page.getByTestId("point-list")).toContainText("No points yet.");
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(page.getByTestId('point-count')).toHaveText('0');
+  await expect(page.getByTestId('point-list')).toContainText('No points yet.');
 });
 
-test("guards clearing unsaved route changes", async ({ page }) => {
-  await page.goto("/");
+test('guards clearing unsaved route changes', async ({ page }) => {
+  await page.goto('/');
 
-  await page.getByRole("button", { name: "Add point at map center" }).click();
-  await expect(page.getByTestId("save-status")).toHaveText("New unsaved route");
+  await addPointAtMap(page);
+  await expect(page.getByTestId('save-status')).toHaveText('New unsaved route');
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Clear this route");
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Clear this route');
     await dialog.dismiss();
   });
-  await page.getByRole("button", { name: "Clear", exact: true }).click();
-  await expect(page.getByTestId("point-count")).toHaveText("1");
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(page.getByTestId('point-count')).toHaveText('1');
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Clear this route");
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Clear this route');
     await dialog.accept();
   });
-  await page.getByRole("button", { name: "Clear", exact: true }).click();
-  await expect(page.getByTestId("point-count")).toHaveText("0");
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await expect(page.getByTestId('point-count')).toHaveText('0');
 });
 
-test("saves, loads, copies, and deletes routes in the local library", async ({
+test('saves, loads, updates, and deletes routes in the local library', async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto('/');
 
-  await page.getByLabel("Route name").fill("Library test walk");
-  await page.getByLabel("Route name").blur();
-  await page.getByRole("button", { name: "Add point at map center" }).click();
-  await page.getByRole("button", { name: "Save route" }).click();
+  await page.getByLabel('Route name').fill('Library test walk');
+  await page.getByLabel('Route name').blur();
+  await addPointAtMap(page);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-  await expect(page.getByTestId("save-status")).toHaveText("Saved");
-  await expect(page.getByTestId("saved-route-list")).toContainText(
-    "Library test walk",
+  await expect(page.getByTestId('save-status')).toHaveText('Saved');
+  await openLibraryTab(page);
+  await expect(page.getByTestId('saved-route-list')).toContainText(
+    'Library test walk',
   );
-  const savedRouteRow = page.getByTestId("saved-route-row").first();
-  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
-    "Activity",
+  const savedRouteRow = page.getByTestId('saved-route-row').first();
+  await expect(savedRouteRow.getByTestId('saved-route-mode')).toContainText(
+    'Walk',
   );
-  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
-    "Walk",
+  await expect(savedRouteRow.getByTestId('saved-route-distance')).toContainText(
+    '0.00 mi',
   );
-  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
-    "Distance",
+  await expect(savedRouteRow.getByTestId('saved-route-meta')).toContainText(
+    '1 point',
   );
-  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
-    "0.00 mi",
-  );
-  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
-    "Points",
-  );
-  await expect(savedRouteRow.getByTestId("saved-route-meta")).toContainText(
-    "1 point",
-  );
-  await expect(savedRouteRow.getByTestId("saved-route-updated")).toContainText(
-    "Updated",
+  await expect(savedRouteRow.getByTestId('saved-route-updated')).toContainText(
+    'Updated',
   );
 
-  await page.getByRole("button", { name: "New route" }).click();
-  await expect(page.getByLabel("Route name")).toHaveValue("New route");
+  await openCurrentRouteTab(page);
+  await clearCurrentRoute(page);
+  await expect(page.getByLabel('Route name')).toHaveValue('New route');
 
-  await page
-    .getByTestId("saved-route-row")
-    .filter({ hasText: "Library test walk" })
-    .click();
-  await expect(page.getByTestId("selected-route-status")).toContainText(
-    "Selected: Library test walk",
-  );
-  await page.getByRole("button", { name: "Load selected" }).click();
-  await expect(page.getByLabel("Route name")).toHaveValue("Library test walk");
-  await expect(page.getByTestId("point-count")).toHaveText("1");
+  await openLibraryTab(page);
+  const libraryTestRow = page
+    .getByTestId('saved-route-row')
+    .filter({ hasText: 'Library test walk' });
+  await expect(page.getByTestId('selected-route-status')).toHaveCount(0);
+  await libraryTestRow.getByRole('button', { name: 'Load' }).click();
+  await expect(page.getByLabel('Route name')).toHaveValue('Library test walk');
+  await expect(page.getByTestId('point-count')).toHaveText('1');
 
-  await page.getByRole("button", { name: "Copy selected" }).click();
-  await expect(page.getByTestId("saved-route-list")).toContainText(
-    "Library test walk copy",
-  );
-
-  await page
-    .getByTestId("saved-route-row")
-    .filter({ hasText: "Library test walk copy" })
-    .click();
-  await page.getByRole("button", { name: "Delete selected" }).click();
-  await expect(page.getByTestId("saved-route-list")).toContainText(
-    "Library test walk",
-  );
-});
-
-test("selects saved route rows without loading them", async ({ page }) => {
-  await page.goto("/");
-
-  await page.getByRole("button", { name: "Add point at map center" }).click();
-  await page.getByLabel("Route name").fill("First saved route");
-  await page.getByRole("button", { name: "Save route", exact: true }).click();
-
-  await page.getByRole("button", { name: "New route" }).click();
-  await page.getByRole("button", { name: "Add point at map center" }).click();
-  await page.getByLabel("Route name").fill("Second saved route");
-  await page.getByRole("button", { name: "Save route", exact: true }).click();
-
-  const rows = page.getByTestId("saved-route-row");
-  await expect(rows.filter({ hasText: "Second saved route" })).toHaveClass(
-    /is-selected/,
-  );
-  await expect(page.getByTestId("selected-route-status")).toContainText(
-    "Selected: Second saved route",
-  );
-  await expect(rows.filter({ hasText: "First saved route" })).not.toHaveClass(
-    /is-selected/,
-  );
-
-  await rows.filter({ hasText: "First saved route" }).click();
-
-  await expect(rows.filter({ hasText: "First saved route" })).toHaveClass(
-    /is-selected/,
-  );
-  await expect(page.getByTestId("selected-route-status")).toContainText(
-    "Selected: First saved route",
-  );
-  await expect(rows.filter({ hasText: "Second saved route" })).not.toHaveClass(
-    /is-selected/,
-  );
-  await expect(page.getByLabel("Route name")).toHaveValue("Second saved route");
-
-  await page.getByRole("button", { name: "Clear selection" }).click();
-  await expect(page.getByTestId("selected-route-status")).toHaveText(
-    "No saved route selected.",
-  );
-  await expect(rows.filter({ hasText: "First saved route" })).not.toHaveClass(
-    /is-selected/,
-  );
-});
-
-test("shows route library backup controls", async ({ page }) => {
-  await page.goto("/");
-
-  await expect(page.getByRole("button", { name: "Export JSON" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Import JSON" })).toBeVisible();
-  await expect(page.getByTestId("backup-status")).toHaveText(
-    "Back up saved routes as app JSON.",
-  );
-});
-
-test("shows current route JSON controls", async ({ page }) => {
-  await page.goto("/");
-
-  await expect(
-    page.getByRole("button", { name: "Export current route JSON" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Import current route JSON" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Export current route GPX" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Import current route GPX" }),
-  ).toBeVisible();
-  await expect(page.getByTestId("route-file-status")).toHaveText(
-    "Export or import one route as app JSON or GPX.",
-  );
-});
-
-test("stages and cancels current route JSON import", async ({ page }) => {
-  await page.goto("/");
-
-  await page.getByLabel("Route name").fill("Keep current route");
-  await page.getByLabel("Route name").blur();
-
-  await page.locator("#importCurrentRouteFile").setInputFiles({
-    name: "route.json",
-    mimeType: "application/json",
-    buffer: Buffer.from(
-      JSON.stringify(createRouteFileFixture("Imported route")),
-    ),
-  });
-
-  await expect(page.getByTestId("route-file-status")).toHaveText(
-    "Review the route import before replacing the current route.",
-  );
-  await expect(page.getByTestId("route-import-preview")).toContainText(
-    "route.json contains",
-  );
-  await expect(page.getByTestId("route-import-preview")).toContainText(
-    "Imported route",
-  );
-
-  await page.getByRole("button", { name: "Cancel route import" }).click();
-
-  await expect(page.getByTestId("route-file-status")).toHaveText(
-    "Route import canceled.",
-  );
-  await expect(page.getByTestId("route-import-preview")).toBeHidden();
-  await expect(page.getByLabel("Route name")).toHaveValue("Keep current route");
-});
-
-test("confirms current route JSON import replacement", async ({ page }) => {
-  await page.goto("/");
-
-  await page.getByLabel("Route name").fill("Replace current route");
-  await page.getByLabel("Route name").blur();
-
-  await page.locator("#importCurrentRouteFile").setInputFiles({
-    name: "route.json",
-    mimeType: "application/json",
-    buffer: Buffer.from(
-      JSON.stringify(createRouteFileFixture("Imported route")),
-    ),
-  });
-
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Importing this route");
+  await openCurrentRouteTab(page);
+  await addPointAtMap(page);
+  await openLibraryTab(page);
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Update "Library test walk"');
     await dialog.accept();
   });
-  await page.getByRole("button", { name: "Replace current route" }).click();
-
-  await expect(page.getByTestId("route-file-status")).toHaveText(
-    "Imported route: Imported route.",
+  await libraryTestRow.getByRole('button', { name: 'Update' }).click();
+  await expect(libraryTestRow.getByTestId('saved-route-meta')).toContainText(
+    '2 points',
   );
-  await expect(page.getByTestId("route-import-preview")).toBeHidden();
-  await expect(page.getByLabel("Route name")).toHaveValue("Imported route");
-  await expect(page.getByTestId("point-count")).toHaveText("1");
-  await expect(page.getByTestId("saved-route-list")).toContainText(
-    "No saved routes yet.",
+
+  await libraryTestRow.getByRole('button', { name: 'Delete Library test walk' }).click();
+  await expect(page.getByTestId('saved-route-list')).not.toContainText(
+    'Library test walk',
   );
 });
 
-test("stages and confirms current route GPX import", async ({ page }) => {
-  await page.goto("/");
+test('clicking a saved route row does not load it', async ({ page }) => {
+  await page.goto('/');
 
-  await page.getByLabel("Route name").fill("Replace with GPX");
-  await page.getByLabel("Route name").blur();
+  await addPointAtMap(page);
+  await page.getByLabel('Route name').fill('First saved route');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-  await page.locator("#importCurrentRouteGpxFile").setInputFiles({
-    name: "morning-loop.gpx",
-    mimeType: "application/gpx+xml",
-    buffer: Buffer.from(createGpxFixture("Imported GPX route")),
+  await clearCurrentRoute(page);
+  await addPointAtMap(page);
+  await page.getByLabel('Route name').fill('Second saved route');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await openLibraryTab(page);
+
+  const rows = page.getByTestId('saved-route-row');
+  await expect(rows.filter({ hasText: 'Second saved route' })).toHaveClass(
+    /is-current/,
+  );
+  await expect(rows.filter({ hasText: 'First saved route' })).not.toHaveClass(
+    /is-current/,
+  );
+  await expect(page.getByTestId('selected-route-status')).toHaveCount(0);
+
+  await rows.filter({ hasText: 'First saved route' }).click();
+
+  await expect(page.getByLabel('Route name')).toHaveValue('Second saved route');
+  await expect(rows.filter({ hasText: 'First saved route' })).not.toHaveClass(
+    /is-current/,
+  );
+  await expect(rows.filter({ hasText: 'Second saved route' })).toHaveClass(
+    /is-current/,
+  );
+});
+
+test('shows route library backup controls', async ({ page }) => {
+  await page.goto('/');
+  await openLibraryTab(page);
+
+  await expect(
+    page.getByRole('button', { name: 'Export library JSON' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Import library JSON' }),
+  ).toBeVisible();
+  await expect(page.getByTestId('backup-status')).toHaveText(
+    'Back up saved routes as app JSON.',
+  );
+});
+
+test('shows current route JSON controls', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(
+    page.getByRole('button', { name: 'Export route JSON' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Import route JSON' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Export GPX' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import GPX' })).toBeVisible();
+  await expect(page.getByTestId('route-file-status')).toHaveText(
+    'Back up or restore the current route as app JSON or GPX.',
+  );
+});
+
+test('stages and cancels current route JSON import', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByLabel('Route name').fill('Keep current route');
+  await page.getByLabel('Route name').blur();
+
+  await page.locator('#importCurrentRouteFile').setInputFiles({
+    name: 'route.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify(createRouteFileFixture('Imported route')),
+    ),
   });
 
-  await expect(page.getByTestId("route-file-status")).toHaveText(
-    "Review the GPX import before replacing the current route.",
+  await expect(page.getByTestId('route-file-status')).toHaveText(
+    'Review the route import before replacing the current route.',
   );
-  await expect(page.getByTestId("route-import-preview")).toContainText(
-    "morning-loop.gpx contains",
+  await expect(page.getByTestId('route-import-preview')).toContainText(
+    'route.json contains',
   );
-  await expect(page.getByTestId("route-import-preview")).toContainText(
-    "Imported GPX route",
+  await expect(page.getByTestId('route-import-preview')).toContainText(
+    'Imported route',
   );
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Importing this route");
+  await page.getByRole('button', { name: 'Cancel route import' }).click();
+
+  await expect(page.getByTestId('route-file-status')).toHaveText(
+    'Route import canceled.',
+  );
+  await expect(page.getByTestId('route-import-preview')).toBeHidden();
+  await expect(page.getByLabel('Route name')).toHaveValue('Keep current route');
+});
+
+test('confirms current route JSON import replacement', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByLabel('Route name').fill('Replace current route');
+  await page.getByLabel('Route name').blur();
+
+  await page.locator('#importCurrentRouteFile').setInputFiles({
+    name: 'route.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify(createRouteFileFixture('Imported route')),
+    ),
+  });
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Importing this route');
     await dialog.accept();
   });
-  await page.getByRole("button", { name: "Replace current route" }).click();
+  await page.getByRole('button', { name: 'Replace current route' }).click();
 
-  await expect(page.getByTestId("route-file-status")).toHaveText(
-    "Imported route: Imported GPX route.",
+  await expect(page.getByTestId('route-file-status')).toHaveText(
+    'Imported route: Imported route.',
   );
-  await expect(page.getByLabel("Route name")).toHaveValue("Imported GPX route");
-  await expect(page.getByTestId("point-count")).toHaveText("2");
+  await expect(page.getByTestId('route-import-preview')).toBeHidden();
+  await expect(page.getByLabel('Route name')).toHaveValue('Imported route');
+  await expect(page.getByTestId('point-count')).toHaveText('1');
+  await expect(page.getByTestId('saved-route-list')).toContainText(
+    'No saved routes yet.',
+  );
 });
 
-test("stages and cancels route library JSON import", async ({ page }) => {
-  await page.goto("/");
+test('stages and confirms current route GPX import', async ({ page }) => {
+  await page.goto('/');
 
-  await page.getByLabel("Route name").fill("Keep this route");
-  await page.getByLabel("Route name").blur();
-  await page.getByRole("button", { name: "Add point at map center" }).click();
-  await page.getByRole("button", { name: "Save route" }).click();
+  await page.getByLabel('Route name').fill('Replace with GPX');
+  await page.getByLabel('Route name').blur();
 
-  await page.locator("#importLibraryFile").setInputFiles({
-    name: "routes.json",
-    mimeType: "application/json",
+  await page.locator('#importCurrentRouteGpxFile').setInputFiles({
+    name: 'morning-loop.gpx',
+    mimeType: 'application/gpx+xml',
+    buffer: Buffer.from(createGpxFixture('Imported GPX route')),
+  });
+
+  await expect(page.getByTestId('route-file-status')).toHaveText(
+    'Review the GPX import before replacing the current route.',
+  );
+  await expect(page.getByTestId('route-import-preview')).toContainText(
+    'morning-loop.gpx contains',
+  );
+  await expect(page.getByTestId('route-import-preview')).toContainText(
+    'Imported GPX route',
+  );
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Importing this route');
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: 'Replace current route' }).click();
+
+  await expect(page.getByTestId('route-file-status')).toHaveText(
+    'Imported route: Imported GPX route.',
+  );
+  await expect(page.getByLabel('Route name')).toHaveValue('Imported GPX route');
+  await expect(page.getByTestId('point-count')).toHaveText('2');
+});
+
+test('stages and cancels route library JSON import', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByLabel('Route name').fill('Keep this route');
+  await page.getByLabel('Route name').blur();
+  await addPointAtMap(page);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await openLibraryTab(page);
+
+  await page.locator('#importLibraryFile').setInputFiles({
+    name: 'routes.json',
+    mimeType: 'application/json',
     buffer: Buffer.from(
-      JSON.stringify(createRouteLibraryBackupFixture("Imported route")),
+      JSON.stringify(createRouteLibraryBackupFixture('Imported route')),
     ),
   });
 
-  await expect(page.getByTestId("backup-status")).toHaveText(
-    "Review the import before replacing your library.",
+  await expect(page.getByTestId('backup-status')).toHaveText(
+    'Review the import before replacing your library.',
   );
-  await expect(page.getByTestId("import-preview")).toContainText(
-    "routes.json contains 1 saved route",
+  await expect(page.getByTestId('import-preview')).toContainText(
+    'routes.json contains 1 saved route',
   );
-  await expect(page.getByTestId("import-preview")).toContainText(
-    "current 1 saved route",
+  await expect(page.getByTestId('import-preview')).toContainText(
+    'current 1 saved route',
   );
 
-  await page.getByRole("button", { name: "Cancel import" }).click();
+  await page.getByRole('button', { name: 'Cancel import' }).click();
 
-  await expect(page.getByTestId("backup-status")).toHaveText(
-    "Import canceled.",
+  await expect(page.getByTestId('backup-status')).toHaveText(
+    'Import canceled.',
   );
-  await expect(page.getByTestId("import-preview")).toBeHidden();
-  await expect(page.getByTestId("saved-route-list")).toContainText(
-    "Keep this route",
+  await expect(page.getByTestId('import-preview')).toBeHidden();
+  await expect(page.getByTestId('saved-route-list')).toContainText(
+    'Keep this route',
   );
-  await expect(page.getByTestId("saved-route-list")).not.toContainText(
-    "Imported route",
+  await expect(page.getByTestId('saved-route-list')).not.toContainText(
+    'Imported route',
   );
 });
 
-test("confirms route library JSON import replacement", async ({ page }) => {
-  await page.goto("/");
+test('confirms route library JSON import replacement', async ({ page }) => {
+  await page.goto('/');
 
-  await page.getByLabel("Route name").fill("Replace this route");
-  await page.getByLabel("Route name").blur();
-  await page.getByRole("button", { name: "Add point at map center" }).click();
-  await page.getByRole("button", { name: "Save route" }).click();
+  await page.getByLabel('Route name').fill('Replace this route');
+  await page.getByLabel('Route name').blur();
+  await addPointAtMap(page);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await openLibraryTab(page);
 
-  await page.locator("#importLibraryFile").setInputFiles({
-    name: "routes.json",
-    mimeType: "application/json",
+  await page.locator('#importLibraryFile').setInputFiles({
+    name: 'routes.json',
+    mimeType: 'application/json',
     buffer: Buffer.from(
-      JSON.stringify(createRouteLibraryBackupFixture("Imported route")),
+      JSON.stringify(createRouteLibraryBackupFixture('Imported route')),
     ),
   });
 
-  await page.getByRole("button", { name: "Replace library" }).click();
+  await page.getByRole('button', { name: 'Replace library' }).click();
 
-  await expect(page.getByTestId("backup-status")).toHaveText(
-    "Imported 1 saved route.",
+  await expect(page.getByTestId('backup-status')).toHaveText(
+    'Imported 1 saved route.',
   );
-  await expect(page.getByTestId("import-preview")).toBeHidden();
-  await expect(page.getByTestId("saved-route-list")).toContainText(
-    "Imported route",
+  await expect(page.getByTestId('import-preview')).toBeHidden();
+  await expect(page.getByTestId('saved-route-list')).toContainText(
+    'Imported route',
   );
-  await expect(page.getByTestId("saved-route-list")).not.toContainText(
-    "Replace this route",
+  await expect(page.getByTestId('saved-route-list')).not.toContainText(
+    'Replace this route',
   );
 });
 
-test("sorts and filters saved routes in the library", async ({ page }) => {
+test('sorts and filters saved routes in the library', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(
-      "walk-bike-run.routeLibrary.v1",
+      'walk-bike-run.routeLibrary.v1',
       JSON.stringify([
         createSavedRouteStorageEntry({
-          id: "run-route",
-          name: "Zoo run",
-          activityType: "run",
-          updatedAt: "2026-05-03T12:00:00.000Z",
+          id: 'run-route',
+          name: 'Zoo run',
+          activityType: 'run',
+          updatedAt: '2026-05-03T12:00:00.000Z',
           points: [
-            { id: "run-a", name: "Start", lat: 43, lng: -72 },
-            { id: "run-b", name: "End", lat: 43.02, lng: -72 },
+            { id: 'run-a', name: 'Start', lat: 43, lng: -72 },
+            { id: 'run-b', name: 'End', lat: 43.02, lng: -72 },
           ],
         }),
         createSavedRouteStorageEntry({
-          id: "walk-route",
-          name: "Apple walk",
-          activityType: "walk",
-          updatedAt: "2026-05-03T13:00:00.000Z",
-          points: [{ id: "walk-a", name: "Start", lat: 43, lng: -72 }],
+          id: 'walk-route',
+          name: 'Apple walk',
+          activityType: 'walk',
+          updatedAt: '2026-05-03T13:00:00.000Z',
+          points: [{ id: 'walk-a', name: 'Start', lat: 43, lng: -72 }],
         }),
         createSavedRouteStorageEntry({
-          id: "bike-route",
-          name: "Bike loop",
-          activityType: "bike",
-          updatedAt: "2026-05-03T14:00:00.000Z",
+          id: 'bike-route',
+          name: 'Bike loop',
+          activityType: 'bike',
+          updatedAt: '2026-05-03T14:00:00.000Z',
           points: [
-            { id: "bike-a", name: "Start", lat: 43, lng: -72 },
-            { id: "bike-b", name: "Middle", lat: 43.08, lng: -72 },
-            { id: "bike-c", name: "End", lat: 43.16, lng: -72 },
+            { id: 'bike-a', name: 'Start', lat: 43, lng: -72 },
+            { id: 'bike-b', name: 'Middle', lat: 43.08, lng: -72 },
+            { id: 'bike-c', name: 'End', lat: 43.16, lng: -72 },
           ],
         }),
       ]),
@@ -446,71 +428,93 @@ test("sorts and filters saved routes in the library", async ({ page }) => {
     }
   });
 
-  await page.goto("/");
+  await page.goto('/');
+  await openLibraryTab(page);
 
   expect(await savedRouteNames(page)).toEqual([
-    "Zoo run",
-    "Apple walk",
-    "Bike loop",
+    'Zoo run',
+    'Apple walk',
+    'Bike loop',
   ]);
-  await expect(page.getByTestId("library-status")).toContainText(
-    "3 of 3 saved routes shown",
+  await expect(page.getByTestId('library-status')).toContainText(
+    '3 of 3 saved routes shown',
   );
 
-  await page.getByTestId("library-sort-by").selectOption("name");
+  await page.getByTestId('library-sort-name-asc').click();
   expect(await savedRouteNames(page)).toEqual([
-    "Apple walk",
-    "Bike loop",
-    "Zoo run",
+    'Apple walk',
+    'Bike loop',
+    'Zoo run',
   ]);
 
-  await page.getByTestId("library-sort-by").selectOption("points");
+  await page.getByTestId('library-sort-distance-desc').click();
   expect(await savedRouteNames(page)).toEqual([
-    "Bike loop",
-    "Zoo run",
-    "Apple walk",
+    'Bike loop',
+    'Zoo run',
+    'Apple walk',
   ]);
 
-  await page.getByTestId("library-activity-filter").selectOption("bike");
-  expect(await savedRouteNames(page)).toEqual(["Bike loop"]);
-  await expect(page.getByTestId("library-status")).toContainText(
-    "1 of 3 saved routes shown",
+  await page.getByTestId('library-filter-activity').click();
+  await page.getByTestId('library-activity-filter').selectOption('bike');
+  expect(await savedRouteNames(page)).toEqual(['Bike loop']);
+  await expect(page.getByTestId('library-status')).toContainText(
+    '1 of 3 saved routes shown',
   );
-  await expect(page.getByTestId("saved-route-list")).not.toContainText(
-    "Apple walk",
+  await expect(page.getByTestId('saved-route-list')).not.toContainText(
+    'Apple walk',
   );
 });
 
+async function addPointAtMap(page) {
+  await page.getByTestId('map').click({ position: { x: 160, y: 160 } });
+}
+
+async function clearCurrentRoute(page) {
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Clear this route');
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+}
+
+async function openCurrentRouteTab(page) {
+  await page.getByRole('tab', { name: 'Current route' }).click();
+}
+
+async function openLibraryTab(page) {
+  await page.getByRole('tab', { name: 'Library' }).click();
+}
+
 async function savedRouteNames(page) {
   return page
-    .getByTestId("saved-route-name")
+    .getByTestId('saved-route-name')
     .evaluateAll((nodes) => nodes.map((node) => node.textContent));
 }
 
 function createRouteLibraryBackupFixture(routeName) {
   return {
     schemaVersion: 1,
-    kind: "walk-bike-run.route-library-backup",
-    appVersion: "0.2.0-dev",
-    exportedAt: "2026-05-03T13:00:00.000Z",
+    kind: 'walk-bike-run.route-library-backup',
+    appVersion: '0.2.0-dev',
+    exportedAt: '2026-05-03T13:00:00.000Z',
     routes: [
       {
         schemaVersion: 1,
-        id: "saved-imported",
+        id: 'saved-imported',
         name: routeName,
-        activityType: "walk",
+        activityType: 'walk',
         loop: false,
         points: [
           {
-            id: "point-imported",
-            name: "Imported point",
+            id: 'point-imported',
+            name: 'Imported point',
             lat: 43.6426,
             lng: -72.2518,
           },
         ],
         distanceMeters: 0,
-        createdAt: "2026-05-03T12:00:00.000Z",
-        updatedAt: "2026-05-03T12:00:00.000Z",
+        createdAt: '2026-05-03T12:00:00.000Z',
+        updatedAt: '2026-05-03T12:00:00.000Z',
       },
     ],
   };
@@ -519,17 +523,17 @@ function createRouteLibraryBackupFixture(routeName) {
 function createRouteFileFixture(routeName) {
   return {
     schemaVersion: 1,
-    kind: "walk-bike-run.route",
-    appVersion: "0.2.0-dev",
-    exportedAt: "2026-05-03T13:00:00.000Z",
+    kind: 'walk-bike-run.route',
+    appVersion: '0.2.0-dev',
+    exportedAt: '2026-05-03T13:00:00.000Z',
     route: {
       name: routeName,
-      activityType: "bike",
+      activityType: 'bike',
       loop: false,
       points: [
         {
-          id: "point-imported-route",
-          name: "Imported route point",
+          id: 'point-imported-route',
+          name: 'Imported route point',
           lat: 43.6426,
           lng: -72.2518,
         },

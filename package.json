@@ -1,6 +1,6 @@
 {
   "name": "walk-bike-run",
-  "version": "0.2.0-dev",
+  "version": "0.3.0-dev",
   "private": true,
   "type": "module",
   "description": "A small personal route planner for walking, biking, and running.",
