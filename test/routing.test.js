@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildWorkerRouteUrl,
   createStraightSegment,
   getRouteLegs,
   resolveRoutingProvider,
   routeSegments,
+  ROUTING_PROVIDER_OPENROUTESERVICE,
   ROUTING_PROVIDER_OSRM,
-  ROUTING_PROVIDER_WORKER,
 } from '../src/routing.js';
 import { createRoute, setLoop } from '../src/route-model.js';
 
@@ -20,20 +19,20 @@ const route = createRoute({
 });
 
 describe('routing providers', () => {
-  it('uses the routing Worker in auto mode when a Worker URL exists', () => {
+  it('uses the ORS/HEIGIT Worker in auto mode when a Worker URL exists', () => {
     expect(
       resolveRoutingProvider({
         provider: 'auto',
-        routingWorkerUrl: 'https://example.workers.dev',
+        orsBaseUrl: 'https://example.workers.dev',
       }),
-    ).toBe(ROUTING_PROVIDER_WORKER);
+    ).toBe(ROUTING_PROVIDER_OPENROUTESERVICE);
   });
 
-  it('falls back to OSRM when the routing Worker has no URL', () => {
+  it('falls back to OSRM when the ORS/HEIGIT Worker has no URL', () => {
     expect(
       resolveRoutingProvider({
-        provider: ROUTING_PROVIDER_WORKER,
-        routingWorkerUrl: '',
+        provider: ROUTING_PROVIDER_OPENROUTESERVICE,
+        orsBaseUrl: '',
       }),
     ).toBe(ROUTING_PROVIDER_OSRM);
   });
@@ -64,23 +63,9 @@ describe('routing providers', () => {
     expect(segment.coordinates).toHaveLength(2);
   });
 
-  it('builds Worker route URLs from either a root URL or route endpoint URL', () => {
-    expect(
-      buildWorkerRouteUrl('https://example.workers.dev', 'cycling-regular'),
-    ).toBe('https://example.workers.dev/route?profile=cycling-regular');
-    expect(
-      buildWorkerRouteUrl(
-        'https://example.workers.dev/route?debug=1',
-        'foot-walking',
-      ),
-    ).toBe('https://example.workers.dev/route?debug=1&profile=foot-walking');
-  });
-
-  it('routes Worker GeoJSON responses without sending an API key', async () => {
+  it('routes ORS/HEIGIT Worker GeoJSON responses', async () => {
     const fetchImpl = async (url, options) => {
-      expect(url).toBe(
-        'https://example.workers.dev/route?profile=cycling-regular',
-      );
+      expect(url).toBe('https://example.workers.dev/route?profile=cycling-regular');
       expect(options.headers.Authorization).toBeUndefined();
       expect(JSON.parse(options.body).coordinates).toHaveLength(2);
 
@@ -109,13 +94,13 @@ describe('routing providers', () => {
     const plan = await routeSegments(
       route,
       {
-        provider: ROUTING_PROVIDER_WORKER,
-        routingWorkerUrl: 'https://example.workers.dev',
+        provider: ROUTING_PROVIDER_OPENROUTESERVICE,
+        orsBaseUrl: 'https://example.workers.dev/',
       },
       fetchImpl,
     );
 
-    expect(plan.provider).toBe(ROUTING_PROVIDER_WORKER);
+    expect(plan.provider).toBe(ROUTING_PROVIDER_OPENROUTESERVICE);
     expect(plan.segments[0].fallback).toBe(false);
     expect(plan.segments[0].distance).toBe(1234);
     expect(plan.segments[0].duration).toBe(567);

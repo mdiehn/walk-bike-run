@@ -38,17 +38,25 @@ import {
   getRouteLegs,
   resolveRoutingProvider,
   routeSegments,
-  ROUTING_PROVIDER_WORKER,
+  ROUTING_PROVIDER_OPENROUTESERVICE,
 } from './routing.js';
 import { APP_VERSION } from './version.js';
+import {
+  createLocalDownloadProvider,
+  createGoogleDriveProvider,
+  GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY,
+} from './cloudStorage.js';
 
 const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
-const DEFAULT_ROUTING_WORKER_URL = import.meta.env?.VITE_ROUTING_WORKER_URL || '';
+const APP_STATE_STORAGE_KEY = 'walkBikeRun.appState';
 
-let route = createRoute({ name: 'New route', activityType: 'walk' });
 let routeLibrary = loadRouteLibrary();
-let activeRouteTab = 'current';
+const persistedAppState = loadAppState();
+let route =
+  persistedAppState.route ??
+  createRoute({ name: 'New route', activityType: 'walk' });
+let activeRouteTab = persistedAppState.activeRouteTab ?? 'current';
 let librarySortBy = 'saved';
 let librarySortDirection = DEFAULT_LIBRARY_SORT_DIRECTIONS.saved;
 let libraryActivityFilter = 'all';
@@ -56,10 +64,16 @@ let libraryNameFilter = '';
 let libraryDistanceFilter = 'all';
 let libraryDurationFilter = 'all';
 let activeLibraryFilterKey = null;
-let activeSavedRouteId = null;
-let routeDirty = false;
+let activeSavedRouteId =
+  persistedAppState.activeSavedRouteId &&
+  getSavedRoute(routeLibrary, persistedAppState.activeSavedRouteId)
+    ? persistedAppState.activeSavedRouteId
+    : null;
+let routeDirty = Boolean(persistedAppState.routeDirty);
+let persistedMapView = persistedAppState.mapView;
 let pendingRouteImport = null;
 let pendingLibraryImport = null;
+let cloudSettings = loadCloudSettings();
 let map;
 let pointLayer;
 let lineLayer;
@@ -123,6 +137,7 @@ app.innerHTML = `
           <div class="button-row route-action-row">
             <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
             <button id="fitRoute" type="button" class="secondary">Fit</button>
+            <button id="replotRoute" type="button" class="secondary">Replot</button>
             <button id="clearPoints" type="button" class="secondary">Clear</button>
           </div>
           <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
@@ -131,17 +146,24 @@ app.innerHTML = `
               <span>Routing</span>
               <select id="routingProvider" data-testid="routing-provider">
                 <option value="auto">Auto</option>
-                <option value="worker">Cloudflare Worker / ORS</option>
+                <option value="openrouteservice">ORS/HEIGIT Worker</option>
                 <option value="osrm">OSRM fallback</option>
               </select>
             </label>
-            <label class="field-row compact-field">
+            <label class="field-row compact-field routing-url-field">
               <span>Worker URL</span>
-              <input id="routingWorkerUrl" type="url" autocomplete="off" placeholder="https://name.workers.dev" data-testid="routing-worker-url" />
+              <input id="orsBaseUrl" type="url" autocomplete="off" placeholder="https://example.workers.dev" data-testid="ors-base-url" />
             </label>
-            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses the Worker when configured, otherwise OSRM.</p>
+            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until a Worker URL is set.</p>
           </div>
         </section>
+
+        <div class="sr-only" aria-hidden="true">
+          <strong id="mapStatus">Starting</strong>
+          <strong id="inputStatus">Checking</strong>
+          <strong id="viewportStatus">Checking</strong>
+          <strong id="pointCount" data-testid="point-count">0</strong>
+        </div>
 
         <section class="panel-section route-workspace">
           <div class="section-title-row">
@@ -235,6 +257,22 @@ app.innerHTML = `
               <input id="importLibraryFile" class="sr-only" type="file" accept="application/json,.json" />
             </div>
             <p id="backupStatus" class="hint-text" data-testid="backup-status">Back up saved routes as app JSON.</p>
+            <div class="cloud-storage-panel" aria-label="Google Drive library backup">
+              <h3>Google Drive backup</h3>
+              <label class="field-row compact-field">
+                <span>Google Client ID</span>
+                <input id="googleClientId" type="text" autocomplete="off" placeholder="1234567890-example.apps.googleusercontent.com" data-testid="google-client-id" />
+              </label>
+              <div class="button-row cloud-action-row">
+                <button id="connectGoogleDrive" type="button" class="secondary">Connect Google Drive</button>
+                <button id="disconnectGoogleDrive" type="button" class="secondary">Disconnect</button>
+              </div>
+              <div class="button-row cloud-action-row">
+                <button id="saveLibraryToDrive" type="button" class="secondary">Save library to Google Drive</button>
+                <button id="loadLibraryFromDrive" type="button" class="secondary">Load library from Google Drive</button>
+              </div>
+              <p id="googleDriveStatus" class="hint-text" data-testid="google-drive-status">Google Drive is not connected.</p>
+            </div>
             <div id="importPreview" class="import-preview is-hidden" data-testid="import-preview" hidden>
               <p id="importPreviewText"></p>
               <div class="button-row">
@@ -264,6 +302,10 @@ function libraryHeaderCell(sortKey, label, sortTestId, filterTestId) {
 }
 
 const elements = {
+  mapStatus: document.querySelector('#mapStatus'),
+  inputStatus: document.querySelector('#inputStatus'),
+  viewportStatus: document.querySelector('#viewportStatus'),
+  pointCount: document.querySelector('#pointCount'),
   distanceText: document.querySelector('#distanceText'),
   estimatedTimeText: document.querySelector('#estimatedTimeText'),
   paceText: document.querySelector('#paceText'),
@@ -272,10 +314,11 @@ const elements = {
   activityType: document.querySelector('#activityType'),
   loopToggle: document.querySelector('#loopToggle'),
   fitRoute: document.querySelector('#fitRoute'),
+  replotRoute: document.querySelector('#replotRoute'),
   clearPoints: document.querySelector('#clearPoints'),
   saveRoute: document.querySelector('#saveRoute'),
   routingProvider: document.querySelector('#routingProvider'),
-  routingWorkerUrl: document.querySelector('#routingWorkerUrl'),
+  orsBaseUrl: document.querySelector('#orsBaseUrl'),
   routingStatus: document.querySelector('#routingStatus'),
   exportCurrentRoute: document.querySelector('#exportCurrentRoute'),
   importCurrentRouteButton: document.querySelector('#importCurrentRouteButton'),
@@ -307,6 +350,12 @@ const elements = {
   ),
   libraryBackupControls: document.querySelector('#libraryBackupControls'),
   backupStatus: document.querySelector('#backupStatus'),
+  googleClientId: document.querySelector('#googleClientId'),
+  connectGoogleDrive: document.querySelector('#connectGoogleDrive'),
+  disconnectGoogleDrive: document.querySelector('#disconnectGoogleDrive'),
+  saveLibraryToDrive: document.querySelector('#saveLibraryToDrive'),
+  loadLibraryFromDrive: document.querySelector('#loadLibraryFromDrive'),
+  googleDriveStatus: document.querySelector('#googleDriveStatus'),
   currentRouteTab: document.querySelector('#currentRouteTab'),
   libraryTab: document.querySelector('#libraryTab'),
   currentRoutePanel: document.querySelector('#currentRoutePanel'),
@@ -328,9 +377,12 @@ const elements = {
 };
 
 function initMap() {
+  const mapCenter = persistedMapView?.center ?? INITIAL_CENTER;
+  const mapZoom = persistedMapView?.zoom ?? INITIAL_ZOOM;
+
   map = L.map('map', {
     zoomControl: true,
-  }).setView(INITIAL_CENTER, INITIAL_ZOOM);
+  }).setView(mapCenter, mapZoom);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -349,6 +401,9 @@ function initMap() {
     );
   });
 
+  map.on('moveend zoomend', persistAppState);
+
+  elements.mapStatus.textContent = 'Ready';
 }
 
 function addRoutePoint(lat, lng, name) {
@@ -395,6 +450,7 @@ function renderRoute() {
   renderLibraryList();
   renderMapRoute();
   const routeDistanceMeters = getDisplayedRouteDistanceMeters();
+  elements.pointCount.textContent = String(route.points.length);
   elements.distanceText.textContent = formatMiles(routeDistanceMeters);
   elements.estimatedTimeText.textContent = formatStatsDuration(
     getDisplayedRouteDurationMinutes(),
@@ -405,7 +461,9 @@ function renderRoute() {
   elements.saveRoute.disabled = !routeDirty;
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
   renderRoutingSettings();
+  renderCloudSettings();
   renderBackupPanel();
+  persistAppState();
 }
 
 function renderRouteFields() {
@@ -418,11 +476,136 @@ function renderRouteFields() {
 
 function renderRoutingSettings() {
   elements.routingProvider.value = routingSettings.provider;
-  if (document.activeElement !== elements.routingWorkerUrl) {
-    elements.routingWorkerUrl.value = routingSettings.routingWorkerUrl;
+  if (document.activeElement !== elements.orsBaseUrl) {
+    elements.orsBaseUrl.value = routingSettings.orsBaseUrl;
   }
 
   elements.routingStatus.textContent = getRoutingStatusText();
+}
+
+function renderCloudSettings() {
+  if (document.activeElement !== elements.googleClientId) {
+    elements.googleClientId.value = cloudSettings.googleClientId;
+  }
+
+  const hasClientId = Boolean(cloudSettings.googleClientId.trim());
+  elements.connectGoogleDrive.disabled = !hasClientId;
+  elements.saveLibraryToDrive.disabled = !hasClientId;
+  elements.loadLibraryFromDrive.disabled = !hasClientId;
+  elements.disconnectGoogleDrive.disabled = !hasClientId;
+
+  if (!hasClientId) {
+    elements.googleDriveStatus.textContent =
+      'Enter a Google OAuth Client ID to enable Drive backup.';
+    return;
+  }
+
+  elements.googleDriveStatus.textContent = cloudSettings.googleDriveConnected
+    ? 'Google Drive is connected for this browser session.'
+    : 'Google Drive is ready. Connect before saving or loading.';
+}
+
+function setGoogleDriveStatus(message) {
+  elements.googleDriveStatus.textContent = message;
+}
+
+function loadCloudSettings(storage = globalThis.localStorage) {
+  return {
+    googleClientId:
+      storage?.getItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY) || '',
+    googleDriveConnected: false,
+  };
+}
+
+function saveCloudSettings(storage = globalThis.localStorage) {
+  storage?.setItem(
+    GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY,
+    cloudSettings.googleClientId,
+  );
+}
+
+function createGoogleDriveLibraryProvider() {
+  return createGoogleDriveProvider({
+    clientId: cloudSettings.googleClientId,
+    onStatus: setGoogleDriveStatus,
+  });
+}
+
+async function connectGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+
+  try {
+    setGoogleDriveStatus('Connecting to Google Drive...');
+    await provider.connect();
+    cloudSettings = { ...cloudSettings, googleDriveConnected: true };
+    renderCloudSettings();
+  } catch (error) {
+    cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+    renderCloudSettings();
+    setGoogleDriveStatus(error.message);
+  }
+}
+
+function disconnectGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+  provider.disconnect();
+  cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+  renderCloudSettings();
+}
+
+async function saveLibraryToGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+  const localDownload = createLocalDownloadProvider();
+  const json = serializeRouteLibraryBackup(routeLibrary, {
+    appVersion: APP_VERSION,
+  });
+
+  try {
+    setGoogleDriveStatus('Saving library to Google Drive...');
+    await provider.saveLibrary(json);
+    cloudSettings = { ...cloudSettings, googleDriveConnected: true };
+    renderCloudSettings();
+    setGoogleDriveStatus(
+      `Saved ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'} to Google Drive.`,
+    );
+  } catch (error) {
+    cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+    renderCloudSettings();
+    setGoogleDriveStatus(`${error.message} Local JSON export still works.`);
+    localDownload.saveLibrary(json);
+  }
+}
+
+async function loadLibraryFromGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+
+  try {
+    setGoogleDriveStatus('Loading library from Google Drive...');
+    const json = await provider.loadLibrary();
+    const importedLibrary = parseRouteLibraryBackup(json);
+    const shouldReplace = window.confirm(
+      `Replace your current ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'} with ${importedLibrary.length} saved route${importedLibrary.length === 1 ? '' : 's'} from Google Drive?`,
+    );
+
+    if (!shouldReplace) {
+      setGoogleDriveStatus('Google Drive load canceled.');
+      return;
+    }
+
+    routeLibrary = importedLibrary;
+    activeSavedRouteId = null;
+    routeDirty = true;
+    persistLibrary();
+    cloudSettings = { ...cloudSettings, googleDriveConnected: true };
+    renderRoute();
+    setGoogleDriveStatus(
+      `Loaded ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'} from Google Drive.`,
+    );
+  } catch (error) {
+    cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+    renderCloudSettings();
+    setGoogleDriveStatus(error.message);
+  }
 }
 
 function renderPointList() {
@@ -522,7 +705,7 @@ function renderLibraryList() {
             </div>
             <div class="saved-route-actions" aria-label="${escapeAttr(savedRoute.name)} actions">
               <button type="button" class="small-button secondary" data-load-saved-route="${escapeAttr(savedRoute.id)}">Load</button>
-              <button type="button" class="small-button secondary" data-update-saved-route="${escapeAttr(savedRoute.id)}">Update</button>
+              <button type="button" class="small-button secondary" data-update-saved-route="${escapeAttr(savedRoute.id)}">Overwrite</button>
               <button type="button" class="small-button danger" data-delete-saved-route="${escapeAttr(savedRoute.id)}" aria-label="Delete ${escapeAttr(savedRoute.name)}">Del</button>
             </div>
           </div>
@@ -566,7 +749,6 @@ function renderLibraryFilterControls() {
       control.dataset.libraryFilterControl !== activeLibraryFilterKey;
   });
 }
-
 
 function renderMapRoute() {
   pointLayer.clearLayers();
@@ -663,7 +845,6 @@ function loadSavedRoute(savedRouteId) {
   fitRouteToMap();
 }
 
-
 function removeSavedRoute(savedRouteId) {
   routeLibrary = deleteSavedRoute(routeLibrary, savedRouteId);
   if (activeSavedRouteId === savedRouteId) {
@@ -674,13 +855,12 @@ function removeSavedRoute(savedRouteId) {
   renderRoute();
 }
 
-
 function updateSavedRouteFromCurrent(savedRouteId) {
   const existing = getSavedRoute(routeLibrary, savedRouteId);
   if (!existing) return;
 
   const shouldUpdate = window.confirm(
-    `Update "${existing.name}" with the current route?`,
+    `Overwrite "${existing.name}" with the current route?`,
   );
   if (!shouldUpdate) return;
 
@@ -716,6 +896,7 @@ function setActiveRouteTab(tabName) {
     showLibrary ? 'true' : 'false',
   );
   renderBackupPanel();
+  persistAppState();
 }
 
 function renderBackupPanel() {
@@ -865,17 +1046,7 @@ function exportLibraryJson() {
   const json = serializeRouteLibraryBackup(routeLibrary, {
     appVersion: APP_VERSION,
   });
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const dateStamp = new Date().toISOString().slice(0, 10);
-
-  link.href = url;
-  link.download = `walk-bike-run-routes-${dateStamp}.json`;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  createLocalDownloadProvider().saveLibrary(json);
 
   elements.backupStatus.textContent = `Exported ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'}.`;
 }
@@ -1047,6 +1218,68 @@ function estimatedSegmentDurationSeconds(distanceMetersValue) {
   return (distanceMiles / speedMph) * 3600;
 }
 
+function loadAppState(storage = globalThis.localStorage) {
+  try {
+    const rawState = storage?.getItem(APP_STATE_STORAGE_KEY);
+    if (!rawState) return {};
+
+    const parsedState = JSON.parse(rawState);
+    const savedRoute = parsedState.route
+      ? createRoute(parsedState.route)
+      : null;
+    const center = Array.isArray(parsedState.mapView?.center)
+      ? parsedState.mapView.center
+      : null;
+    const zoom = Number(parsedState.mapView?.zoom);
+
+    return {
+      route: savedRoute,
+      activeSavedRouteId:
+        typeof parsedState.activeSavedRouteId === 'string'
+          ? parsedState.activeSavedRouteId
+          : null,
+      routeDirty: Boolean(parsedState.routeDirty),
+      activeRouteTab:
+        parsedState.activeRouteTab === 'library' ? 'library' : 'current',
+      mapView:
+        center &&
+        Number.isFinite(center[0]) &&
+        Number.isFinite(center[1]) &&
+        Number.isFinite(zoom)
+          ? { center, zoom }
+          : null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function persistAppState(storage = globalThis.localStorage) {
+  if (!storage) return;
+
+  const center = map?.getCenter();
+  const mapView = center
+    ? {
+        center: [center.lat, center.lng],
+        zoom: map.getZoom(),
+      }
+    : persistedMapView;
+
+  const state = {
+    route,
+    activeSavedRouteId,
+    routeDirty,
+    activeRouteTab,
+    mapView,
+  };
+
+  try {
+    storage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(state));
+    persistedMapView = mapView;
+  } catch {
+    // Ignore storage write failures. The app still works without persisted UI state.
+  }
+}
 
 function createEmptyRoutePlan() {
   return {
@@ -1058,20 +1291,20 @@ function createEmptyRoutePlan() {
 }
 
 function loadRoutingSettings(storage = globalThis.localStorage) {
-  const storedProvider = storage?.getItem('walkBikeRun.routingProvider') || 'auto';
-  const provider = storedProvider === 'openrouteservice' ? 'worker' : storedProvider;
-  const routingWorkerUrl =
-    storage?.getItem('walkBikeRun.routingWorkerUrl') || DEFAULT_ROUTING_WORKER_URL;
-
   return {
-    provider,
-    routingWorkerUrl,
+    provider: storage?.getItem('walkBikeRun.routingProvider') || 'auto',
+    orsBaseUrl: storage?.getItem('walkBikeRun.orsBaseUrl') || '',
+    osrmBaseUrl: storage?.getItem('walkBikeRun.osrmBaseUrl') || '',
   };
 }
 
 function saveRoutingSettings(storage = globalThis.localStorage) {
   storage?.setItem('walkBikeRun.routingProvider', routingSettings.provider);
-  storage?.setItem('walkBikeRun.routingWorkerUrl', routingSettings.routingWorkerUrl);
+  storage?.setItem('walkBikeRun.orsBaseUrl', routingSettings.orsBaseUrl);
+  storage?.setItem(
+    'walkBikeRun.osrmBaseUrl',
+    routingSettings.osrmBaseUrl || '',
+  );
   storage?.removeItem('walkBikeRun.orsApiKey');
 }
 
@@ -1090,7 +1323,9 @@ function scheduleRoutePlanUpdate() {
     routeKey: nextRouteKey,
     status: 'pending',
     provider: resolveRoutingProvider(routingSettings),
-    segments: getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg)),
+    segments: getRouteLegs(route).map((leg) =>
+      createDisplayFallbackSegment(leg),
+    ),
   };
 
   window.clearTimeout(routingTimer);
@@ -1104,7 +1339,8 @@ async function updateRoutePlan(requestId) {
 
   try {
     const plan = await routeSegments(routeSnapshot, routingSettings);
-    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey()) return;
+    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
+      return;
 
     routePlan = {
       ...plan,
@@ -1112,25 +1348,41 @@ async function updateRoutePlan(requestId) {
     };
     renderRoute();
   } catch {
-    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey()) return;
+    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
+      return;
     routePlan = {
       routeKey,
       provider: resolveRoutingProvider(routingSettings),
       status: 'failed',
-      segments: getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg)),
+      segments: getRouteLegs(route).map((leg) =>
+        createDisplayFallbackSegment(leg),
+      ),
     };
     renderRoute();
   }
 }
 
+function forceReplotRoute() {
+  window.clearTimeout(routingTimer);
+  routePlan = createEmptyRoutePlan();
+  const requestId = (routingRequestId += 1);
+  updateRoutePlan(requestId);
+  renderRoute();
+}
+
 function getRoutePlanKey(routeValue = route) {
   const pointKey = routeValue.points
-    .map((point) => `${point.id}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`)
+    .map(
+      (point) => `${point.id}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`,
+    )
     .join('|');
   const provider = resolveRoutingProvider(routingSettings);
-  const endpointState = routingSettings.routingWorkerUrl || 'no-worker-url';
+  const workerState = routingSettings.orsBaseUrl
+    ? routingSettings.orsBaseUrl
+    : 'no-worker-url';
+  const osrmState = routingSettings.osrmBaseUrl || 'default-osrm';
 
-  return `${routeValue.activityType}:${routeValue.loop}:${provider}:${endpointState}:${pointKey}`;
+  return `${routeValue.activityType}:${routeValue.loop}:${provider}:${workerState}:${osrmState}:${pointKey}`;
 }
 
 function createDisplayFallbackSegment(leg) {
@@ -1207,9 +1459,14 @@ function renderMileMarkers(linePoints) {
       interactive: false,
       icon: L.divIcon({
         className: 'mile-marker-shell',
-        html: `<div class="mile-marker">${markerPoint.mile}</div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
+        html: `
+          <div class="mile-marker">
+            <span class="mile-marker-number">${markerPoint.mile}</span>
+            <span class="mile-marker-arrow" style="transform: rotate(${markerPoint.bearingDegrees - 90}deg);">➤</span>
+          </div>
+        `,
+        iconSize: [34, 22],
+        iconAnchor: [17, 11],
       }),
     }).addTo(mileMarkerLayer);
   });
@@ -1221,18 +1478,32 @@ function getMileMarkerPoints(linePoints) {
   let accumulatedMeters = 0;
 
   for (let index = 1; index < linePoints.length; index += 1) {
-    const from = { lat: linePoints[index - 1][0], lng: linePoints[index - 1][1] };
+    const from = {
+      lat: linePoints[index - 1][0],
+      lng: linePoints[index - 1][1],
+    };
     const to = { lat: linePoints[index][0], lng: linePoints[index][1] };
     const segmentMeters = distanceMeters(from, to);
 
+    if (segmentMeters <= 0) {
+      continue;
+    }
+
     while (accumulatedMeters + segmentMeters >= nextMileMeters) {
       const ratio = (nextMileMeters - accumulatedMeters) / segmentMeters;
+      const bearingDegrees = getBearingDegrees(from, to);
+      const markerLat = from.lat + (to.lat - from.lat) * ratio;
+      const markerLng = from.lng + (to.lng - from.lng) * ratio;
+
       markers.push({
         mile: Math.round(nextMileMeters / 1609.344),
-        latLng: [
-          from.lat + (to.lat - from.lat) * ratio,
-          from.lng + (to.lng - from.lng) * ratio,
-        ],
+        latLng: offsetMarkerLatLng(
+          markerLat,
+          markerLng,
+          bearingDegrees,
+          markers.length,
+        ),
+        bearingDegrees,
       });
       nextMileMeters += 1609.344;
     }
@@ -1243,21 +1514,69 @@ function getMileMarkerPoints(linePoints) {
   return markers;
 }
 
+function getBearingDegrees(from, to) {
+  const fromLat = toRadians(from.lat);
+  const toLat = toRadians(to.lat);
+  const deltaLng = toRadians(to.lng - from.lng);
+  const y = Math.sin(deltaLng) * Math.cos(toLat);
+  const x =
+    Math.cos(fromLat) * Math.sin(toLat) -
+    Math.sin(fromLat) * Math.cos(toLat) * Math.cos(deltaLng);
+  return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+}
+
+function offsetMarkerLatLng(lat, lng, bearingDegrees, markerIndex) {
+  const offsetMeters = markerIndex % 2 === 0 ? 7 : -7;
+  const perpendicularDegrees = bearingDegrees + 90;
+  const latMeters = 111_320;
+  const lngMeters = 111_320 * Math.cos(toRadians(lat));
+
+  if (Math.abs(lngMeters) < 0.000001) {
+    return [lat, lng];
+  }
+
+  return [
+    lat +
+      (Math.cos(toRadians(perpendicularDegrees)) * offsetMeters) / latMeters,
+    lng +
+      (Math.sin(toRadians(perpendicularDegrees)) * offsetMeters) / lngMeters,
+  ];
+}
+
+function toRadians(degrees) {
+  return degrees * (Math.PI / 180);
+}
+
+function toDegrees(radians) {
+  return radians * (180 / Math.PI);
+}
+
 function getRoutingStatusText() {
   const provider = resolveRoutingProvider(routingSettings);
-  const providerLabel = provider === ROUTING_PROVIDER_WORKER ? 'Worker / ORS' : 'OSRM';
+  const providerLabel =
+    provider === ROUTING_PROVIDER_OPENROUTESERVICE
+      ? 'ORS/HEIGIT Worker'
+      : 'OSRM';
 
-  if (routingSettings.provider === 'worker' && provider !== ROUTING_PROVIDER_WORKER) {
-    return 'Add the Worker URL to use ORS routing; using OSRM fallback for now.';
-  }
   if (route.points.length < 2) return `${providerLabel} routing ready.`;
   if (routePlan.status === 'pending') return `Routing with ${providerLabel}...`;
   if (routePlan.status === 'partial-fallback') {
     return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
   }
-  if (routePlan.status === 'failed') return `Routing failed; showing straight-line fallback.`;
+  if (routePlan.status === 'failed')
+    return `Routing failed; showing straight-line fallback.`;
   if (routePlan.status === 'routed') return `Routed with ${providerLabel}.`;
   return `${providerLabel} routing ready.`;
+}
+
+function updateDeviceStatus() {
+  const touchCapable =
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia('(pointer: coarse)').matches;
+  elements.inputStatus.textContent = touchCapable
+    ? 'Touch capable'
+    : 'Mouse/trackpad';
+  elements.viewportStatus.textContent = `${window.innerWidth}x${window.innerHeight}`;
 }
 
 function formatMiles(meters) {
@@ -1297,14 +1616,16 @@ function formatDisplayedPace(distanceMetersValue) {
   if (route.activityType === 'bike') {
     const hours = getDisplayedRouteDurationMinutes() / 60;
     const miles = distanceMetersValue / 1609.344;
-    const speed = hours > 0 ? miles / hours : activitySpeedMph(route.activityType);
+    const speed =
+      hours > 0 ? miles / hours : activitySpeedMph(route.activityType);
     return `${speed.toFixed(1)} mph`;
   }
 
   const miles = distanceMetersValue / 1609.344;
-  const paceMinutes = miles > 0
-    ? getDisplayedRouteDurationMinutes() / miles
-    : 60 / activitySpeedMph(route.activityType);
+  const paceMinutes =
+    miles > 0
+      ? getDisplayedRouteDurationMinutes() / miles
+      : 60 / activitySpeedMph(route.activityType);
   const minutes = Math.floor(paceMinutes);
   const seconds = Math.round((paceMinutes - minutes) * 60);
   return `${minutes}:${String(seconds).padStart(2, '0')} m/mi`;
@@ -1368,10 +1689,10 @@ elements.routingProvider.addEventListener('change', (event) => {
   renderRoute();
 });
 
-elements.routingWorkerUrl.addEventListener('change', (event) => {
+elements.orsBaseUrl.addEventListener('change', (event) => {
   routingSettings = {
     ...routingSettings,
-    routingWorkerUrl: event.target.value.trim(),
+    orsBaseUrl: event.target.value.trim(),
   };
   saveRoutingSettings();
   routePlan = createEmptyRoutePlan();
@@ -1379,6 +1700,7 @@ elements.routingWorkerUrl.addEventListener('change', (event) => {
 });
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
+elements.replotRoute.addEventListener('click', forceReplotRoute);
 
 elements.clearPoints.addEventListener('click', () => {
   if (!confirmClearRoute()) return;
@@ -1470,6 +1792,19 @@ elements.importLibraryFile.addEventListener('change', async (event) => {
 });
 elements.confirmImportLibrary.addEventListener('click', confirmLibraryImport);
 elements.cancelImportLibrary.addEventListener('click', cancelLibraryImport);
+elements.googleClientId.addEventListener('change', (event) => {
+  cloudSettings = {
+    ...cloudSettings,
+    googleClientId: event.target.value.trim(),
+    googleDriveConnected: false,
+  };
+  saveCloudSettings();
+  renderCloudSettings();
+});
+elements.connectGoogleDrive.addEventListener('click', connectGoogleDrive);
+elements.disconnectGoogleDrive.addEventListener('click', disconnectGoogleDrive);
+elements.saveLibraryToDrive.addEventListener('click', saveLibraryToGoogleDrive);
+elements.loadLibraryFromDrive.addEventListener('click', loadLibraryFromGoogleDrive);
 
 elements.pointList.addEventListener('click', (event) => {
   const deleteButton = event.target.closest('[data-delete-point]');
@@ -1516,12 +1851,13 @@ elements.savedRouteList.addEventListener('click', (event) => {
     removeSavedRoute(deleteButton.dataset.deleteSavedRoute);
     return;
   }
-
 });
 
+window.addEventListener('resize', updateDeviceStatus);
 
 initMap();
 setActiveRouteTab(activeRouteTab);
+updateDeviceStatus();
 renderRouteImportPreview();
 renderImportPreview();
 renderRoute();
