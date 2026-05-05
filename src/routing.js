@@ -2,19 +2,18 @@ import { activitySpeedMph, distanceMeters } from './route-model.js';
 
 export const ROUTING_PROVIDER_AUTO = 'auto';
 export const ROUTING_PROVIDER_OSRM = 'osrm';
-export const ROUTING_PROVIDER_OPENROUTESERVICE = 'openrouteservice';
+export const ROUTING_PROVIDER_WORKER = 'worker';
 
 const METERS_PER_MILE = 1609.344;
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
-const ORS_BASE_URL = 'https://api.openrouteservice.org';
 
-export function resolveRoutingProvider({ provider, orsApiKey } = {}) {
-  if (provider === ROUTING_PROVIDER_OPENROUTESERVICE && orsApiKey) {
-    return ROUTING_PROVIDER_OPENROUTESERVICE;
+export function resolveRoutingProvider({ provider, routingWorkerUrl } = {}) {
+  if (provider === ROUTING_PROVIDER_WORKER && routingWorkerUrl) {
+    return ROUTING_PROVIDER_WORKER;
   }
 
-  if (provider === ROUTING_PROVIDER_AUTO && orsApiKey) {
-    return ROUTING_PROVIDER_OPENROUTESERVICE;
+  if (provider === ROUTING_PROVIDER_AUTO && routingWorkerUrl) {
+    return ROUTING_PROVIDER_WORKER;
   }
 
   return ROUTING_PROVIDER_OSRM;
@@ -87,8 +86,8 @@ export function createStraightSegment(leg, activityType) {
 
 async function routeLeg(leg, activityType, provider, settings, fetchImpl) {
   try {
-    if (provider === ROUTING_PROVIDER_OPENROUTESERVICE) {
-      return await routeOpenRouteServiceLeg(leg, activityType, settings, fetchImpl);
+    if (provider === ROUTING_PROVIDER_WORKER) {
+      return await routeWorkerLeg(leg, activityType, settings, fetchImpl);
     }
     return await routeOsrmLeg(leg, activityType, fetchImpl);
   } catch {
@@ -121,31 +120,27 @@ async function routeOsrmLeg(leg, activityType, fetchImpl) {
   };
 }
 
-async function routeOpenRouteServiceLeg(leg, activityType, settings, fetchImpl) {
-  if (!settings.orsApiKey) {
-    throw new Error('OpenRouteService API key is required.');
+async function routeWorkerLeg(leg, activityType, settings, fetchImpl) {
+  if (!settings.routingWorkerUrl) {
+    throw new Error('Routing Worker URL is required.');
   }
 
   const profile = activityType === 'bike' ? 'cycling-regular' : 'foot-walking';
-  const response = await fetchImpl(
-    `${ORS_BASE_URL}/v2/directions/${profile}/geojson`,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/geo+json, application/json',
-        Authorization: settings.orsApiKey,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: JSON.stringify({
-        coordinates: [
-          [leg.from.lng, leg.from.lat],
-          [leg.to.lng, leg.to.lat],
-        ],
-      }),
+  const response = await fetchImpl(buildWorkerRouteUrl(settings.routingWorkerUrl, profile), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/geo+json, application/json',
+      'Content-Type': 'application/json; charset=utf-8',
     },
-  );
+    body: JSON.stringify({
+      coordinates: [
+        [leg.from.lng, leg.from.lat],
+        [leg.to.lng, leg.to.lat],
+      ],
+    }),
+  });
 
-  if (!response.ok) throw new Error('OpenRouteService route request failed.');
+  if (!response.ok) throw new Error('Routing Worker route request failed.');
 
   const data = await response.json();
   const feature = data.features?.[0];
@@ -153,15 +148,26 @@ async function routeOpenRouteServiceLeg(leg, activityType, settings, fetchImpl) 
   const summary = feature?.properties?.summary;
 
   if (!coordinates?.length || !summary) {
-    throw new Error('OpenRouteService returned no route geometry.');
+    throw new Error('Routing Worker returned no route geometry.');
   }
 
   return {
     ...leg,
-    provider: ROUTING_PROVIDER_OPENROUTESERVICE,
+    provider: ROUTING_PROVIDER_WORKER,
     fallback: false,
     distance: Number(summary.distance) || 0,
     duration: Number(summary.duration) || 0,
     coordinates: coordinates.map(([lng, lat]) => [lat, lng]),
   };
+}
+
+export function buildWorkerRouteUrl(workerUrl, profile) {
+  const url = new URL(workerUrl);
+
+  if (url.pathname === '' || url.pathname === '/') {
+    url.pathname = '/route';
+  }
+
+  url.searchParams.set('profile', profile);
+  return url.toString();
 }

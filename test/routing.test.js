@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildWorkerRouteUrl,
   createStraightSegment,
   getRouteLegs,
   resolveRoutingProvider,
   routeSegments,
-  ROUTING_PROVIDER_OPENROUTESERVICE,
   ROUTING_PROVIDER_OSRM,
+  ROUTING_PROVIDER_WORKER,
 } from '../src/routing.js';
 import { createRoute, setLoop } from '../src/route-model.js';
 
@@ -19,17 +20,20 @@ const route = createRoute({
 });
 
 describe('routing providers', () => {
-  it('uses OpenRouteService in auto mode when a key exists', () => {
-    expect(resolveRoutingProvider({ provider: 'auto', orsApiKey: 'key' })).toBe(
-      ROUTING_PROVIDER_OPENROUTESERVICE,
-    );
-  });
-
-  it('falls back to OSRM when OpenRouteService has no key', () => {
+  it('uses the routing Worker in auto mode when a Worker URL exists', () => {
     expect(
       resolveRoutingProvider({
-        provider: ROUTING_PROVIDER_OPENROUTESERVICE,
-        orsApiKey: '',
+        provider: 'auto',
+        routingWorkerUrl: 'https://example.workers.dev',
+      }),
+    ).toBe(ROUTING_PROVIDER_WORKER);
+  });
+
+  it('falls back to OSRM when the routing Worker has no URL', () => {
+    expect(
+      resolveRoutingProvider({
+        provider: ROUTING_PROVIDER_WORKER,
+        routingWorkerUrl: '',
       }),
     ).toBe(ROUTING_PROVIDER_OSRM);
   });
@@ -60,10 +64,24 @@ describe('routing providers', () => {
     expect(segment.coordinates).toHaveLength(2);
   });
 
-  it('routes OpenRouteService GeoJSON responses', async () => {
+  it('builds Worker route URLs from either a root URL or route endpoint URL', () => {
+    expect(
+      buildWorkerRouteUrl('https://example.workers.dev', 'cycling-regular'),
+    ).toBe('https://example.workers.dev/route?profile=cycling-regular');
+    expect(
+      buildWorkerRouteUrl(
+        'https://example.workers.dev/route?debug=1',
+        'foot-walking',
+      ),
+    ).toBe('https://example.workers.dev/route?debug=1&profile=foot-walking');
+  });
+
+  it('routes Worker GeoJSON responses without sending an API key', async () => {
     const fetchImpl = async (url, options) => {
-      expect(url).toContain('/v2/directions/cycling-regular/geojson');
-      expect(options.headers.Authorization).toBe('key');
+      expect(url).toBe(
+        'https://example.workers.dev/route?profile=cycling-regular',
+      );
+      expect(options.headers.Authorization).toBeUndefined();
       expect(JSON.parse(options.body).coordinates).toHaveLength(2);
 
       return {
@@ -90,11 +108,14 @@ describe('routing providers', () => {
 
     const plan = await routeSegments(
       route,
-      { provider: ROUTING_PROVIDER_OPENROUTESERVICE, orsApiKey: 'key' },
+      {
+        provider: ROUTING_PROVIDER_WORKER,
+        routingWorkerUrl: 'https://example.workers.dev',
+      },
       fetchImpl,
     );
 
-    expect(plan.provider).toBe(ROUTING_PROVIDER_OPENROUTESERVICE);
+    expect(plan.provider).toBe(ROUTING_PROVIDER_WORKER);
     expect(plan.segments[0].fallback).toBe(false);
     expect(plan.segments[0].distance).toBe(1234);
     expect(plan.segments[0].duration).toBe(567);

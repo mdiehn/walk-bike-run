@@ -38,12 +38,13 @@ import {
   getRouteLegs,
   resolveRoutingProvider,
   routeSegments,
-  ROUTING_PROVIDER_OPENROUTESERVICE,
+  ROUTING_PROVIDER_WORKER,
 } from './routing.js';
 import { APP_VERSION } from './version.js';
 
 const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
+const DEFAULT_ROUTING_WORKER_URL = import.meta.env?.VITE_ROUTING_WORKER_URL || '';
 
 let route = createRoute({ name: 'New route', activityType: 'walk' });
 let routeLibrary = loadRouteLibrary();
@@ -130,37 +131,17 @@ app.innerHTML = `
               <span>Routing</span>
               <select id="routingProvider" data-testid="routing-provider">
                 <option value="auto">Auto</option>
-                <option value="openrouteservice">OpenRouteService</option>
+                <option value="worker">Cloudflare Worker / ORS</option>
                 <option value="osrm">OSRM fallback</option>
               </select>
             </label>
             <label class="field-row compact-field">
-              <span>ORS key</span>
-              <input id="orsApiKey" type="password" autocomplete="off" placeholder="Paste key to use ORS" data-testid="ors-api-key" />
+              <span>Worker URL</span>
+              <input id="routingWorkerUrl" type="url" autocomplete="off" placeholder="https://name.workers.dev" data-testid="routing-worker-url" />
             </label>
-            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until an ORS key is set.</p>
+            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses the Worker when configured, otherwise OSRM.</p>
           </div>
         </section>
-
-        <section class="panel-section status-grid" aria-label="Status">
-          <div class="status-card">
-            <span class="status-label">Map</span>
-            <strong id="mapStatus">Starting</strong>
-          </div>
-          <div class="status-card">
-            <span class="status-label">Input</span>
-            <strong id="inputStatus">Checking</strong>
-          </div>
-          <div class="status-card">
-            <span class="status-label">Viewport</span>
-            <strong id="viewportStatus">Checking</strong>
-          </div>
-          <div class="status-card">
-            <span class="status-label">Points</span>
-            <strong id="pointCount" data-testid="point-count">0</strong>
-          </div>
-        </section>
-
 
         <section class="panel-section route-workspace">
           <div class="section-title-row">
@@ -283,10 +264,6 @@ function libraryHeaderCell(sortKey, label, sortTestId, filterTestId) {
 }
 
 const elements = {
-  mapStatus: document.querySelector('#mapStatus'),
-  inputStatus: document.querySelector('#inputStatus'),
-  viewportStatus: document.querySelector('#viewportStatus'),
-  pointCount: document.querySelector('#pointCount'),
   distanceText: document.querySelector('#distanceText'),
   estimatedTimeText: document.querySelector('#estimatedTimeText'),
   paceText: document.querySelector('#paceText'),
@@ -298,7 +275,7 @@ const elements = {
   clearPoints: document.querySelector('#clearPoints'),
   saveRoute: document.querySelector('#saveRoute'),
   routingProvider: document.querySelector('#routingProvider'),
-  orsApiKey: document.querySelector('#orsApiKey'),
+  routingWorkerUrl: document.querySelector('#routingWorkerUrl'),
   routingStatus: document.querySelector('#routingStatus'),
   exportCurrentRoute: document.querySelector('#exportCurrentRoute'),
   importCurrentRouteButton: document.querySelector('#importCurrentRouteButton'),
@@ -372,7 +349,6 @@ function initMap() {
     );
   });
 
-  elements.mapStatus.textContent = 'Ready';
 }
 
 function addRoutePoint(lat, lng, name) {
@@ -419,7 +395,6 @@ function renderRoute() {
   renderLibraryList();
   renderMapRoute();
   const routeDistanceMeters = getDisplayedRouteDistanceMeters();
-  elements.pointCount.textContent = String(route.points.length);
   elements.distanceText.textContent = formatMiles(routeDistanceMeters);
   elements.estimatedTimeText.textContent = formatStatsDuration(
     getDisplayedRouteDurationMinutes(),
@@ -443,8 +418,8 @@ function renderRouteFields() {
 
 function renderRoutingSettings() {
   elements.routingProvider.value = routingSettings.provider;
-  if (document.activeElement !== elements.orsApiKey) {
-    elements.orsApiKey.value = routingSettings.orsApiKey;
+  if (document.activeElement !== elements.routingWorkerUrl) {
+    elements.routingWorkerUrl.value = routingSettings.routingWorkerUrl;
   }
 
   elements.routingStatus.textContent = getRoutingStatusText();
@@ -1083,15 +1058,21 @@ function createEmptyRoutePlan() {
 }
 
 function loadRoutingSettings(storage = globalThis.localStorage) {
+  const storedProvider = storage?.getItem('walkBikeRun.routingProvider') || 'auto';
+  const provider = storedProvider === 'openrouteservice' ? 'worker' : storedProvider;
+  const routingWorkerUrl =
+    storage?.getItem('walkBikeRun.routingWorkerUrl') || DEFAULT_ROUTING_WORKER_URL;
+
   return {
-    provider: storage?.getItem('walkBikeRun.routingProvider') || 'auto',
-    orsApiKey: storage?.getItem('walkBikeRun.orsApiKey') || '',
+    provider,
+    routingWorkerUrl,
   };
 }
 
 function saveRoutingSettings(storage = globalThis.localStorage) {
   storage?.setItem('walkBikeRun.routingProvider', routingSettings.provider);
-  storage?.setItem('walkBikeRun.orsApiKey', routingSettings.orsApiKey);
+  storage?.setItem('walkBikeRun.routingWorkerUrl', routingSettings.routingWorkerUrl);
+  storage?.removeItem('walkBikeRun.orsApiKey');
 }
 
 function scheduleRoutePlanUpdate() {
@@ -1147,9 +1128,9 @@ function getRoutePlanKey(routeValue = route) {
     .map((point) => `${point.id}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`)
     .join('|');
   const provider = resolveRoutingProvider(routingSettings);
-  const keyState = routingSettings.orsApiKey ? 'ors-key' : 'no-ors-key';
+  const endpointState = routingSettings.routingWorkerUrl || 'no-worker-url';
 
-  return `${routeValue.activityType}:${routeValue.loop}:${provider}:${keyState}:${pointKey}`;
+  return `${routeValue.activityType}:${routeValue.loop}:${provider}:${endpointState}:${pointKey}`;
 }
 
 function createDisplayFallbackSegment(leg) {
@@ -1264,11 +1245,11 @@ function getMileMarkerPoints(linePoints) {
 
 function getRoutingStatusText() {
   const provider = resolveRoutingProvider(routingSettings);
-  const providerLabel =
-    provider === ROUTING_PROVIDER_OPENROUTESERVICE
-      ? 'OpenRouteService'
-      : 'OSRM';
+  const providerLabel = provider === ROUTING_PROVIDER_WORKER ? 'Worker / ORS' : 'OSRM';
 
+  if (routingSettings.provider === 'worker' && provider !== ROUTING_PROVIDER_WORKER) {
+    return 'Add the Worker URL to use ORS routing; using OSRM fallback for now.';
+  }
   if (route.points.length < 2) return `${providerLabel} routing ready.`;
   if (routePlan.status === 'pending') return `Routing with ${providerLabel}...`;
   if (routePlan.status === 'partial-fallback') {
@@ -1277,16 +1258,6 @@ function getRoutingStatusText() {
   if (routePlan.status === 'failed') return `Routing failed; showing straight-line fallback.`;
   if (routePlan.status === 'routed') return `Routed with ${providerLabel}.`;
   return `${providerLabel} routing ready.`;
-}
-
-function updateDeviceStatus() {
-  const touchCapable =
-    navigator.maxTouchPoints > 0 ||
-    window.matchMedia('(pointer: coarse)').matches;
-  elements.inputStatus.textContent = touchCapable
-    ? 'Touch capable'
-    : 'Mouse/trackpad';
-  elements.viewportStatus.textContent = `${window.innerWidth}x${window.innerHeight}`;
 }
 
 function formatMiles(meters) {
@@ -1397,10 +1368,10 @@ elements.routingProvider.addEventListener('change', (event) => {
   renderRoute();
 });
 
-elements.orsApiKey.addEventListener('change', (event) => {
+elements.routingWorkerUrl.addEventListener('change', (event) => {
   routingSettings = {
     ...routingSettings,
-    orsApiKey: event.target.value.trim(),
+    routingWorkerUrl: event.target.value.trim(),
   };
   saveRoutingSettings();
   routePlan = createEmptyRoutePlan();
@@ -1548,11 +1519,9 @@ elements.savedRouteList.addEventListener('click', (event) => {
 
 });
 
-window.addEventListener('resize', updateDeviceStatus);
 
 initMap();
 setActiveRouteTab(activeRouteTab);
-updateDeviceStatus();
 renderRouteImportPreview();
 renderImportPreview();
 renderRoute();

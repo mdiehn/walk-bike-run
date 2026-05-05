@@ -34,7 +34,7 @@ test('adds, renames, reorders, and clears route points', async ({ page }) => {
   await addPointAtMap(page);
   await addPointAtMap(page);
 
-  await expect(page.getByTestId('point-count')).toHaveText('2');
+  await expect(page.getByTestId('point-row')).toHaveCount(2);
   await expect(page.getByTestId('point-list')).toContainText('Point 1');
   await expect(page.getByTestId('point-list')).toContainText('Point 2');
 
@@ -51,7 +51,7 @@ test('adds, renames, reorders, and clears route points', async ({ page }) => {
     await dialog.accept();
   });
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
-  await expect(page.getByTestId('point-count')).toHaveText('0');
+  await expect(page.getByTestId('point-row')).toHaveCount(0);
   await expect(page.getByTestId('point-list')).toContainText('No points yet.');
 });
 
@@ -66,14 +66,14 @@ test('guards clearing unsaved route changes', async ({ page }) => {
     await dialog.dismiss();
   });
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
-  await expect(page.getByTestId('point-count')).toHaveText('1');
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
 
   page.once('dialog', async (dialog) => {
     expect(dialog.message()).toContain('Clear this route');
     await dialog.accept();
   });
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
-  await expect(page.getByTestId('point-count')).toHaveText('0');
+  await expect(page.getByTestId('point-row')).toHaveCount(0);
 });
 
 test('saves, loads, updates, and deletes routes in the local library', async ({
@@ -116,7 +116,7 @@ test('saves, loads, updates, and deletes routes in the local library', async ({
   await expect(page.getByTestId('selected-route-status')).toHaveCount(0);
   await libraryTestRow.getByRole('button', { name: 'Load' }).click();
   await expect(page.getByLabel('Route name')).toHaveValue('Library test walk');
-  await expect(page.getByTestId('point-count')).toHaveText('1');
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
 
   await openCurrentRouteTab(page);
   await addPointAtMap(page);
@@ -258,7 +258,7 @@ test('confirms current route JSON import replacement', async ({ page }) => {
   );
   await expect(page.getByTestId('route-import-preview')).toBeHidden();
   await expect(page.getByLabel('Route name')).toHaveValue('Imported route');
-  await expect(page.getByTestId('point-count')).toHaveText('1');
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
   await expect(page.getByTestId('saved-route-list')).toContainText(
     'No saved routes yet.',
   );
@@ -296,7 +296,7 @@ test('stages and confirms current route GPX import', async ({ page }) => {
     'Imported route: Imported GPX route.',
   );
   await expect(page.getByLabel('Route name')).toHaveValue('Imported GPX route');
-  await expect(page.getByTestId('point-count')).toHaveText('2');
+  await expect(page.getByTestId('point-row')).toHaveCount(2);
 });
 
 test('stages and cancels route library JSON import', async ({ page }) => {
@@ -466,8 +466,7 @@ test('sorts and filters saved routes in the library', async ({ page }) => {
 });
 
 async function addPointAtMap(page) {
-  const pointCountText = await page.getByTestId('point-count').textContent();
-  const pointCount = Number.parseInt(pointCountText ?? '0', 10) || 0;
+  const pointCount = await page.getByTestId('point-row').count();
   const clickPositions = [
     { x: 150, y: 150 },
     { x: 260, y: 190 },
