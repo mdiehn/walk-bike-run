@@ -122,15 +122,17 @@ test('saves, loads, updates, and deletes routes in the local library', async ({
   await addPointAtMap(page);
   await openLibraryTab(page);
   page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain('Update "Library test walk"');
+    expect(dialog.message()).toContain('Overwrite "Library test walk"');
     await dialog.accept();
   });
-  await libraryTestRow.getByRole('button', { name: 'Update' }).click();
+  await libraryTestRow.getByRole('button', { name: 'Overwrite' }).click();
   await expect(libraryTestRow.getByTestId('saved-route-meta')).toContainText(
     '2 points',
   );
 
-  await libraryTestRow.getByRole('button', { name: 'Delete Library test walk' }).click();
+  await libraryTestRow
+    .getByRole('button', { name: 'Delete Library test walk' })
+    .click();
   await expect(page.getByTestId('saved-route-list')).not.toContainText(
     'Library test walk',
   );

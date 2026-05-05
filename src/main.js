@@ -44,10 +44,14 @@ import { APP_VERSION } from './version.js';
 
 const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
+const APP_STATE_STORAGE_KEY = 'walkBikeRun.appState';
 
-let route = createRoute({ name: 'New route', activityType: 'walk' });
 let routeLibrary = loadRouteLibrary();
-let activeRouteTab = 'current';
+const persistedAppState = loadAppState();
+let route =
+  persistedAppState.route ??
+  createRoute({ name: 'New route', activityType: 'walk' });
+let activeRouteTab = persistedAppState.activeRouteTab ?? 'current';
 let librarySortBy = 'saved';
 let librarySortDirection = DEFAULT_LIBRARY_SORT_DIRECTIONS.saved;
 let libraryActivityFilter = 'all';
@@ -55,8 +59,13 @@ let libraryNameFilter = '';
 let libraryDistanceFilter = 'all';
 let libraryDurationFilter = 'all';
 let activeLibraryFilterKey = null;
-let activeSavedRouteId = null;
-let routeDirty = false;
+let activeSavedRouteId =
+  persistedAppState.activeSavedRouteId &&
+  getSavedRoute(routeLibrary, persistedAppState.activeSavedRouteId)
+    ? persistedAppState.activeSavedRouteId
+    : null;
+let routeDirty = Boolean(persistedAppState.routeDirty);
+let persistedMapView = persistedAppState.mapView;
 let pendingRouteImport = null;
 let pendingLibraryImport = null;
 let map;
@@ -143,25 +152,12 @@ app.innerHTML = `
           </div>
         </section>
 
-        <section class="panel-section status-grid" aria-label="Status">
-          <div class="status-card">
-            <span class="status-label">Map</span>
-            <strong id="mapStatus">Starting</strong>
-          </div>
-          <div class="status-card">
-            <span class="status-label">Input</span>
-            <strong id="inputStatus">Checking</strong>
-          </div>
-          <div class="status-card">
-            <span class="status-label">Viewport</span>
-            <strong id="viewportStatus">Checking</strong>
-          </div>
-          <div class="status-card">
-            <span class="status-label">Points</span>
-            <strong id="pointCount" data-testid="point-count">0</strong>
-          </div>
-        </section>
-
+        <div class="sr-only" aria-hidden="true">
+          <strong id="mapStatus">Starting</strong>
+          <strong id="inputStatus">Checking</strong>
+          <strong id="viewportStatus">Checking</strong>
+          <strong id="pointCount" data-testid="point-count">0</strong>
+        </div>
 
         <section class="panel-section route-workspace">
           <div class="section-title-row">
@@ -353,9 +349,12 @@ const elements = {
 };
 
 function initMap() {
+  const mapCenter = persistedMapView?.center ?? INITIAL_CENTER;
+  const mapZoom = persistedMapView?.zoom ?? INITIAL_ZOOM;
+
   map = L.map('map', {
     zoomControl: true,
-  }).setView(INITIAL_CENTER, INITIAL_ZOOM);
+  }).setView(mapCenter, mapZoom);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -373,6 +372,8 @@ function initMap() {
       `Point ${route.points.length + 1}`,
     );
   });
+
+  map.on('moveend zoomend', persistAppState);
 
   elements.mapStatus.textContent = 'Ready';
 }
@@ -433,6 +434,7 @@ function renderRoute() {
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
   renderRoutingSettings();
   renderBackupPanel();
+  persistAppState();
 }
 
 function renderRouteFields() {
@@ -549,7 +551,7 @@ function renderLibraryList() {
             </div>
             <div class="saved-route-actions" aria-label="${escapeAttr(savedRoute.name)} actions">
               <button type="button" class="small-button secondary" data-load-saved-route="${escapeAttr(savedRoute.id)}">Load</button>
-              <button type="button" class="small-button secondary" data-update-saved-route="${escapeAttr(savedRoute.id)}">Update</button>
+              <button type="button" class="small-button secondary" data-update-saved-route="${escapeAttr(savedRoute.id)}">Overwrite</button>
               <button type="button" class="small-button danger" data-delete-saved-route="${escapeAttr(savedRoute.id)}" aria-label="Delete ${escapeAttr(savedRoute.name)}">Del</button>
             </div>
           </div>
@@ -593,7 +595,6 @@ function renderLibraryFilterControls() {
       control.dataset.libraryFilterControl !== activeLibraryFilterKey;
   });
 }
-
 
 function renderMapRoute() {
   pointLayer.clearLayers();
@@ -690,7 +691,6 @@ function loadSavedRoute(savedRouteId) {
   fitRouteToMap();
 }
 
-
 function removeSavedRoute(savedRouteId) {
   routeLibrary = deleteSavedRoute(routeLibrary, savedRouteId);
   if (activeSavedRouteId === savedRouteId) {
@@ -701,13 +701,12 @@ function removeSavedRoute(savedRouteId) {
   renderRoute();
 }
 
-
 function updateSavedRouteFromCurrent(savedRouteId) {
   const existing = getSavedRoute(routeLibrary, savedRouteId);
   if (!existing) return;
 
   const shouldUpdate = window.confirm(
-    `Update "${existing.name}" with the current route?`,
+    `Overwrite "${existing.name}" with the current route?`,
   );
   if (!shouldUpdate) return;
 
@@ -743,6 +742,7 @@ function setActiveRouteTab(tabName) {
     showLibrary ? 'true' : 'false',
   );
   renderBackupPanel();
+  persistAppState();
 }
 
 function renderBackupPanel() {
@@ -1074,6 +1074,68 @@ function estimatedSegmentDurationSeconds(distanceMetersValue) {
   return (distanceMiles / speedMph) * 3600;
 }
 
+function loadAppState(storage = globalThis.localStorage) {
+  try {
+    const rawState = storage?.getItem(APP_STATE_STORAGE_KEY);
+    if (!rawState) return {};
+
+    const parsedState = JSON.parse(rawState);
+    const savedRoute = parsedState.route
+      ? createRoute(parsedState.route)
+      : null;
+    const center = Array.isArray(parsedState.mapView?.center)
+      ? parsedState.mapView.center
+      : null;
+    const zoom = Number(parsedState.mapView?.zoom);
+
+    return {
+      route: savedRoute,
+      activeSavedRouteId:
+        typeof parsedState.activeSavedRouteId === 'string'
+          ? parsedState.activeSavedRouteId
+          : null,
+      routeDirty: Boolean(parsedState.routeDirty),
+      activeRouteTab:
+        parsedState.activeRouteTab === 'library' ? 'library' : 'current',
+      mapView:
+        center &&
+        Number.isFinite(center[0]) &&
+        Number.isFinite(center[1]) &&
+        Number.isFinite(zoom)
+          ? { center, zoom }
+          : null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function persistAppState(storage = globalThis.localStorage) {
+  if (!storage) return;
+
+  const center = map?.getCenter();
+  const mapView = center
+    ? {
+        center: [center.lat, center.lng],
+        zoom: map.getZoom(),
+      }
+    : persistedMapView;
+
+  const state = {
+    route,
+    activeSavedRouteId,
+    routeDirty,
+    activeRouteTab,
+    mapView,
+  };
+
+  try {
+    storage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(state));
+    persistedMapView = mapView;
+  } catch {
+    // Ignore storage write failures. The app still works without persisted UI state.
+  }
+}
 
 function createEmptyRoutePlan() {
   return {
@@ -1095,7 +1157,10 @@ function loadRoutingSettings(storage = globalThis.localStorage) {
 function saveRoutingSettings(storage = globalThis.localStorage) {
   storage?.setItem('walkBikeRun.routingProvider', routingSettings.provider);
   storage?.setItem('walkBikeRun.orsBaseUrl', routingSettings.orsBaseUrl);
-  storage?.setItem('walkBikeRun.osrmBaseUrl', routingSettings.osrmBaseUrl || '');
+  storage?.setItem(
+    'walkBikeRun.osrmBaseUrl',
+    routingSettings.osrmBaseUrl || '',
+  );
   storage?.removeItem('walkBikeRun.orsApiKey');
 }
 
@@ -1114,7 +1179,9 @@ function scheduleRoutePlanUpdate() {
     routeKey: nextRouteKey,
     status: 'pending',
     provider: resolveRoutingProvider(routingSettings),
-    segments: getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg)),
+    segments: getRouteLegs(route).map((leg) =>
+      createDisplayFallbackSegment(leg),
+    ),
   };
 
   window.clearTimeout(routingTimer);
@@ -1128,7 +1195,8 @@ async function updateRoutePlan(requestId) {
 
   try {
     const plan = await routeSegments(routeSnapshot, routingSettings);
-    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey()) return;
+    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
+      return;
 
     routePlan = {
       ...plan,
@@ -1136,12 +1204,15 @@ async function updateRoutePlan(requestId) {
     };
     renderRoute();
   } catch {
-    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey()) return;
+    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
+      return;
     routePlan = {
       routeKey,
       provider: resolveRoutingProvider(routingSettings),
       status: 'failed',
-      segments: getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg)),
+      segments: getRouteLegs(route).map((leg) =>
+        createDisplayFallbackSegment(leg),
+      ),
     };
     renderRoute();
   }
@@ -1157,10 +1228,14 @@ function forceReplotRoute() {
 
 function getRoutePlanKey(routeValue = route) {
   const pointKey = routeValue.points
-    .map((point) => `${point.id}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`)
+    .map(
+      (point) => `${point.id}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`,
+    )
     .join('|');
   const provider = resolveRoutingProvider(routingSettings);
-  const workerState = routingSettings.orsBaseUrl ? routingSettings.orsBaseUrl : 'no-worker-url';
+  const workerState = routingSettings.orsBaseUrl
+    ? routingSettings.orsBaseUrl
+    : 'no-worker-url';
   const osrmState = routingSettings.osrmBaseUrl || 'default-osrm';
 
   return `${routeValue.activityType}:${routeValue.loop}:${provider}:${workerState}:${osrmState}:${pointKey}`;
@@ -1243,7 +1318,7 @@ function renderMileMarkers(linePoints) {
         html: `
           <div class="mile-marker">
             <span class="mile-marker-number">${markerPoint.mile}</span>
-            <span class="mile-marker-arrow" style="transform: rotate(${markerPoint.bearingDegrees}deg);">➤</span>
+            <span class="mile-marker-arrow" style="transform: rotate(${markerPoint.bearingDegrees - 90}deg);">➤</span>
           </div>
         `,
         iconSize: [34, 22],
@@ -1259,7 +1334,10 @@ function getMileMarkerPoints(linePoints) {
   let accumulatedMeters = 0;
 
   for (let index = 1; index < linePoints.length; index += 1) {
-    const from = { lat: linePoints[index - 1][0], lng: linePoints[index - 1][1] };
+    const from = {
+      lat: linePoints[index - 1][0],
+      lng: linePoints[index - 1][1],
+    };
     const to = { lat: linePoints[index][0], lng: linePoints[index][1] };
     const segmentMeters = distanceMeters(from, to);
 
@@ -1314,8 +1392,10 @@ function offsetMarkerLatLng(lat, lng, bearingDegrees, markerIndex) {
   }
 
   return [
-    lat + (Math.cos(toRadians(perpendicularDegrees)) * offsetMeters) / latMeters,
-    lng + (Math.sin(toRadians(perpendicularDegrees)) * offsetMeters) / lngMeters,
+    lat +
+      (Math.cos(toRadians(perpendicularDegrees)) * offsetMeters) / latMeters,
+    lng +
+      (Math.sin(toRadians(perpendicularDegrees)) * offsetMeters) / lngMeters,
   ];
 }
 
@@ -1339,7 +1419,8 @@ function getRoutingStatusText() {
   if (routePlan.status === 'partial-fallback') {
     return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
   }
-  if (routePlan.status === 'failed') return `Routing failed; showing straight-line fallback.`;
+  if (routePlan.status === 'failed')
+    return `Routing failed; showing straight-line fallback.`;
   if (routePlan.status === 'routed') return `Routed with ${providerLabel}.`;
   return `${providerLabel} routing ready.`;
 }
@@ -1391,14 +1472,16 @@ function formatDisplayedPace(distanceMetersValue) {
   if (route.activityType === 'bike') {
     const hours = getDisplayedRouteDurationMinutes() / 60;
     const miles = distanceMetersValue / 1609.344;
-    const speed = hours > 0 ? miles / hours : activitySpeedMph(route.activityType);
+    const speed =
+      hours > 0 ? miles / hours : activitySpeedMph(route.activityType);
     return `${speed.toFixed(1)} mph`;
   }
 
   const miles = distanceMetersValue / 1609.344;
-  const paceMinutes = miles > 0
-    ? getDisplayedRouteDurationMinutes() / miles
-    : 60 / activitySpeedMph(route.activityType);
+  const paceMinutes =
+    miles > 0
+      ? getDisplayedRouteDurationMinutes() / miles
+      : 60 / activitySpeedMph(route.activityType);
   const minutes = Math.floor(paceMinutes);
   const seconds = Math.round((paceMinutes - minutes) * 60);
   return `${minutes}:${String(seconds).padStart(2, '0')} m/mi`;
@@ -1611,7 +1694,6 @@ elements.savedRouteList.addEventListener('click', (event) => {
     removeSavedRoute(deleteButton.dataset.deleteSavedRoute);
     return;
   }
-
 });
 
 window.addEventListener('resize', updateDeviceStatus);
