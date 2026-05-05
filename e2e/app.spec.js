@@ -466,7 +466,17 @@ test('sorts and filters saved routes in the library', async ({ page }) => {
 });
 
 async function addPointAtMap(page) {
-  await page.getByTestId('map').click({ position: { x: 160, y: 160 } });
+  const pointCountText = await page.getByTestId('point-count').textContent();
+  const pointCount = Number.parseInt(pointCountText ?? '0', 10) || 0;
+  const clickPositions = [
+    { x: 150, y: 150 },
+    { x: 260, y: 190 },
+    { x: 210, y: 260 },
+    { x: 320, y: 230 },
+  ];
+  const position = clickPositions[pointCount % clickPositions.length];
+
+  await page.getByTestId('map').click({ position });
 }
 
 async function clearCurrentRoute(page) {

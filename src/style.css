@@ -822,3 +822,44 @@ select:focus {
 .import-preview.is-hidden {
   display: none;
 }
+
+.routing-settings {
+  border-top: 1px solid #e5e7eb;
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+}
+
+.routing-settings .field-row {
+  gap: 0.35rem;
+}
+
+.routing-settings input,
+.routing-settings select {
+  min-height: 2rem;
+}
+
+.routing-status {
+  margin: 0;
+}
+
+.mile-marker-shell {
+  pointer-events: none;
+}
+
+.mile-marker {
+  align-items: center;
+  background: #111827;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.25);
+  color: #ffffff;
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  height: 1.25rem;
+  justify-content: center;
+  line-height: 1;
+  width: 1.25rem;
+}

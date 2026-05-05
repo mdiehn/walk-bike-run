@@ -12,7 +12,6 @@ import {
   estimatedDurationMinutes,
   renamePoint,
   setLoop,
-  totalDistanceMeters,
   updatePoint,
   updateRoute,
 } from './route-model.js';
@@ -35,6 +34,12 @@ import {
   DEFAULT_LIBRARY_SORT_DIRECTIONS,
   getVisibleSavedRoutes,
 } from './route-library-view.js';
+import {
+  getRouteLegs,
+  resolveRoutingProvider,
+  routeSegments,
+  ROUTING_PROVIDER_OPENROUTESERVICE,
+} from './routing.js';
 import { APP_VERSION } from './version.js';
 
 const INITIAL_CENTER = [43.6426, -72.2518];
@@ -57,6 +62,11 @@ let pendingLibraryImport = null;
 let map;
 let pointLayer;
 let lineLayer;
+let mileMarkerLayer;
+let routingTimer = null;
+let routingRequestId = 0;
+let routePlan = createEmptyRoutePlan();
+let routingSettings = loadRoutingSettings();
 
 const app = document.querySelector('#app');
 
@@ -115,7 +125,21 @@ app.innerHTML = `
             <button id="clearPoints" type="button" class="secondary">Clear</button>
           </div>
           <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
-          <p class="hint-text">Stats use straight-line distance and simple default speeds for now.</p>
+          <div class="routing-settings" aria-label="Routing settings">
+            <label class="field-row compact-field">
+              <span>Routing</span>
+              <select id="routingProvider" data-testid="routing-provider">
+                <option value="auto">Auto</option>
+                <option value="openrouteservice">OpenRouteService</option>
+                <option value="osrm">OSRM fallback</option>
+              </select>
+            </label>
+            <label class="field-row compact-field">
+              <span>ORS key</span>
+              <input id="orsApiKey" type="password" autocomplete="off" placeholder="Paste key to use ORS" data-testid="ors-api-key" />
+            </label>
+            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until an ORS key is set.</p>
+          </div>
         </section>
 
         <section class="panel-section status-grid" aria-label="Status">
@@ -273,6 +297,9 @@ const elements = {
   fitRoute: document.querySelector('#fitRoute'),
   clearPoints: document.querySelector('#clearPoints'),
   saveRoute: document.querySelector('#saveRoute'),
+  routingProvider: document.querySelector('#routingProvider'),
+  orsApiKey: document.querySelector('#orsApiKey'),
+  routingStatus: document.querySelector('#routingStatus'),
   exportCurrentRoute: document.querySelector('#exportCurrentRoute'),
   importCurrentRouteButton: document.querySelector('#importCurrentRouteButton'),
   importCurrentRouteFile: document.querySelector('#importCurrentRouteFile'),
@@ -334,6 +361,7 @@ function initMap() {
   }).addTo(map);
 
   lineLayer = L.layerGroup().addTo(map);
+  mileMarkerLayer = L.layerGroup().addTo(map);
   pointLayer = L.layerGroup().addTo(map);
 
   map.on('click', (event) => {
@@ -385,21 +413,23 @@ function confirmClearRoute() {
 }
 
 function renderRoute() {
+  scheduleRoutePlanUpdate();
   renderRouteFields();
   renderPointList();
   renderLibraryList();
   renderMapRoute();
-  const distanceMeters = totalDistanceMeters(route);
+  const routeDistanceMeters = getDisplayedRouteDistanceMeters();
   elements.pointCount.textContent = String(route.points.length);
-  elements.distanceText.textContent = formatMiles(distanceMeters);
+  elements.distanceText.textContent = formatMiles(routeDistanceMeters);
   elements.estimatedTimeText.textContent = formatStatsDuration(
-    estimatedDurationMinutes(route),
+    getDisplayedRouteDurationMinutes(),
   );
-  elements.paceText.textContent = formatDefaultPace(route.activityType);
+  elements.paceText.textContent = formatDisplayedPace(routeDistanceMeters);
   elements.saveStatus.textContent = getSaveStatusText();
   elements.saveRoute.textContent = routeDirty ? 'Save' : 'Saved';
   elements.saveRoute.disabled = !routeDirty;
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
+  renderRoutingSettings();
   renderBackupPanel();
 }
 
@@ -409,6 +439,15 @@ function renderRouteFields() {
   }
   elements.activityType.value = route.activityType;
   elements.loopToggle.checked = route.loop;
+}
+
+function renderRoutingSettings() {
+  elements.routingProvider.value = routingSettings.provider;
+  if (document.activeElement !== elements.orsApiKey) {
+    elements.orsApiKey.value = routingSettings.orsApiKey;
+  }
+
+  elements.routingStatus.textContent = getRoutingStatusText();
 }
 
 function renderPointList() {
@@ -557,16 +596,16 @@ function renderLibraryFilterControls() {
 function renderMapRoute() {
   pointLayer.clearLayers();
   lineLayer.clearLayers();
+  mileMarkerLayer.clearLayers();
 
-  const latLngs = route.points.map((point) => [point.lat, point.lng]);
+  const linePoints = getDisplayedRouteCoordinates();
 
-  if (latLngs.length > 1) {
-    const linePoints =
-      route.loop && latLngs.length > 2 ? [...latLngs, latLngs[0]] : latLngs;
+  if (linePoints.length > 1) {
     L.polyline(linePoints, {
       className: 'route-line',
       weight: 4,
     }).addTo(lineLayer);
+    renderMileMarkers(linePoints);
   }
 
   route.points.forEach((point, index) => {
@@ -1002,36 +1041,243 @@ function getSaveStatusText() {
 function formatPointSegment(index) {
   if (index === 0) return '<span class="point-segment-muted">Start</span>';
 
-  const meters = distanceMeters(route.points[index - 1], route.points[index]);
-  return formatSegmentDistanceAndTime('From prev', meters);
+  const segment = getSegmentForPoint(index);
+  return formatSegmentDistanceAndTime('From prev', segment);
 }
 
 function formatLoopReturnSegment(index) {
-  const isLastPoint = index === route.points.length - 1;
-  if (!route.loop || !isLastPoint || route.points.length < 3) return '';
+  const segment = getLoopReturnSegment(index);
+  if (!segment) return '';
 
-  const meters = distanceMeters(route.points[index], route.points[0]);
-  return formatSegmentDistanceAndTime('Return', meters);
+  return formatSegmentDistanceAndTime('Return', segment);
 }
 
-function formatSegmentDistanceAndTime(label, meters) {
+function formatSegmentDistanceAndTime(label, segment) {
+  if (!segment) return '';
+
   return `
     <span class="point-segment-line">
       <span class="point-segment-label">${escapeHtml(label)}</span>
-      <strong>${formatMiles(meters)}</strong>
-      <span>${formatLibraryDuration(estimatedSegmentDurationMinutes(meters))}</span>
+      <strong>${formatMiles(segment.distance)}</strong>
+      <span>${formatLibraryDuration(segment.duration / 60)}</span>
     </span>
   `;
 }
 
-function estimatedSegmentDurationMinutes(distanceMetersValue) {
+function estimatedSegmentDurationSeconds(distanceMetersValue) {
   const speedMph = activitySpeedMph(route.activityType);
   if (!speedMph || !Number.isFinite(distanceMetersValue)) return 0;
 
   const distanceMiles = distanceMetersValue / 1609.344;
-  return (distanceMiles / speedMph) * 60;
+  return (distanceMiles / speedMph) * 3600;
 }
 
+
+function createEmptyRoutePlan() {
+  return {
+    routeKey: '',
+    provider: null,
+    status: 'idle',
+    segments: [],
+  };
+}
+
+function loadRoutingSettings(storage = globalThis.localStorage) {
+  return {
+    provider: storage?.getItem('walkBikeRun.routingProvider') || 'auto',
+    orsApiKey: storage?.getItem('walkBikeRun.orsApiKey') || '',
+  };
+}
+
+function saveRoutingSettings(storage = globalThis.localStorage) {
+  storage?.setItem('walkBikeRun.routingProvider', routingSettings.provider);
+  storage?.setItem('walkBikeRun.orsApiKey', routingSettings.orsApiKey);
+}
+
+function scheduleRoutePlanUpdate() {
+  const nextRouteKey = getRoutePlanKey();
+
+  if (routePlan.routeKey === nextRouteKey || route.points.length < 2) {
+    if (route.points.length < 2 && routePlan.status !== 'idle') {
+      routePlan = createEmptyRoutePlan();
+    }
+    return;
+  }
+
+  routePlan = {
+    ...routePlan,
+    routeKey: nextRouteKey,
+    status: 'pending',
+    provider: resolveRoutingProvider(routingSettings),
+    segments: getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg)),
+  };
+
+  window.clearTimeout(routingTimer);
+  const requestId = (routingRequestId += 1);
+  routingTimer = window.setTimeout(() => updateRoutePlan(requestId), 350);
+}
+
+async function updateRoutePlan(requestId) {
+  const routeSnapshot = route;
+  const routeKey = getRoutePlanKey(routeSnapshot);
+
+  try {
+    const plan = await routeSegments(routeSnapshot, routingSettings);
+    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey()) return;
+
+    routePlan = {
+      ...plan,
+      routeKey,
+    };
+    renderRoute();
+  } catch {
+    if (requestId !== routingRequestId || routeKey !== getRoutePlanKey()) return;
+    routePlan = {
+      routeKey,
+      provider: resolveRoutingProvider(routingSettings),
+      status: 'failed',
+      segments: getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg)),
+    };
+    renderRoute();
+  }
+}
+
+function getRoutePlanKey(routeValue = route) {
+  const pointKey = routeValue.points
+    .map((point) => `${point.id}:${point.lat.toFixed(6)},${point.lng.toFixed(6)}`)
+    .join('|');
+  const provider = resolveRoutingProvider(routingSettings);
+  const keyState = routingSettings.orsApiKey ? 'ors-key' : 'no-ors-key';
+
+  return `${routeValue.activityType}:${routeValue.loop}:${provider}:${keyState}:${pointKey}`;
+}
+
+function createDisplayFallbackSegment(leg) {
+  const meters = distanceMeters(leg.from, leg.to);
+  return {
+    ...leg,
+    provider: 'straight-line',
+    fallback: true,
+    distance: meters,
+    duration: estimatedSegmentDurationSeconds(meters),
+    coordinates: [
+      [leg.from.lat, leg.from.lng],
+      [leg.to.lat, leg.to.lng],
+    ],
+  };
+}
+
+function getDisplayedRouteSegments() {
+  if (routePlan.routeKey === getRoutePlanKey() && routePlan.segments.length) {
+    return routePlan.segments;
+  }
+
+  return getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg));
+}
+
+function getDisplayedRouteCoordinates() {
+  const segments = getDisplayedRouteSegments();
+  const coordinates = [];
+
+  segments.forEach((segment) => {
+    segment.coordinates.forEach((coordinate, index) => {
+      if (coordinates.length && index === 0) return;
+      coordinates.push(coordinate);
+    });
+  });
+
+  return coordinates;
+}
+
+function getDisplayedRouteDistanceMeters() {
+  return getDisplayedRouteSegments().reduce(
+    (total, segment) => total + segment.distance,
+    0,
+  );
+}
+
+function getDisplayedRouteDurationMinutes() {
+  return (
+    getDisplayedRouteSegments().reduce(
+      (total, segment) => total + segment.duration,
+      0,
+    ) / 60
+  );
+}
+
+function getSegmentForPoint(index) {
+  if (index === 0) return null;
+
+  return getDisplayedRouteSegments().find(
+    (segment) => !segment.isLoopReturn && segment.toIndex === index,
+  );
+}
+
+function getLoopReturnSegment(index) {
+  if (index !== route.points.length - 1) return null;
+  return getDisplayedRouteSegments().find((segment) => segment.isLoopReturn);
+}
+
+function renderMileMarkers(linePoints) {
+  const markerPoints = getMileMarkerPoints(linePoints);
+
+  markerPoints.forEach((markerPoint) => {
+    L.marker(markerPoint.latLng, {
+      interactive: false,
+      icon: L.divIcon({
+        className: 'mile-marker-shell',
+        html: `<div class="mile-marker">${markerPoint.mile}</div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      }),
+    }).addTo(mileMarkerLayer);
+  });
+}
+
+function getMileMarkerPoints(linePoints) {
+  const markers = [];
+  let nextMileMeters = 1609.344;
+  let accumulatedMeters = 0;
+
+  for (let index = 1; index < linePoints.length; index += 1) {
+    const from = { lat: linePoints[index - 1][0], lng: linePoints[index - 1][1] };
+    const to = { lat: linePoints[index][0], lng: linePoints[index][1] };
+    const segmentMeters = distanceMeters(from, to);
+
+    while (accumulatedMeters + segmentMeters >= nextMileMeters) {
+      const ratio = (nextMileMeters - accumulatedMeters) / segmentMeters;
+      markers.push({
+        mile: Math.round(nextMileMeters / 1609.344),
+        latLng: [
+          from.lat + (to.lat - from.lat) * ratio,
+          from.lng + (to.lng - from.lng) * ratio,
+        ],
+      });
+      nextMileMeters += 1609.344;
+    }
+
+    accumulatedMeters += segmentMeters;
+  }
+
+  return markers;
+}
+
+function getRoutingStatusText() {
+  const provider = resolveRoutingProvider(routingSettings);
+  const providerLabel =
+    provider === ROUTING_PROVIDER_OPENROUTESERVICE
+      ? 'OpenRouteService'
+      : 'OSRM';
+
+  if (route.points.length < 2) return `${providerLabel} routing ready.`;
+  if (routePlan.status === 'pending') return `Routing with ${providerLabel}...`;
+  if (routePlan.status === 'partial-fallback') {
+    return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
+  }
+  if (routePlan.status === 'failed') return `Routing failed; showing straight-line fallback.`;
+  if (routePlan.status === 'routed') return `Routed with ${providerLabel}.`;
+  return `${providerLabel} routing ready.`;
+}
 
 function updateDeviceStatus() {
   const touchCapable =
@@ -1076,11 +1322,18 @@ function formatLibraryDuration(minutes) {
   return days > 0 ? `${days}+${timeText}` : timeText;
 }
 
-function formatDefaultPace(activityType) {
-  const speedMph = activitySpeedMph(activityType);
-  if (activityType === 'bike') return `${speedMph.toFixed(1)} mph`;
+function formatDisplayedPace(distanceMetersValue) {
+  if (route.activityType === 'bike') {
+    const hours = getDisplayedRouteDurationMinutes() / 60;
+    const miles = distanceMetersValue / 1609.344;
+    const speed = hours > 0 ? miles / hours : activitySpeedMph(route.activityType);
+    return `${speed.toFixed(1)} mph`;
+  }
 
-  const paceMinutes = 60 / speedMph;
+  const miles = distanceMetersValue / 1609.344;
+  const paceMinutes = miles > 0
+    ? getDisplayedRouteDurationMinutes() / miles
+    : 60 / activitySpeedMph(route.activityType);
   const minutes = Math.floor(paceMinutes);
   const seconds = Math.round((paceMinutes - minutes) * 60);
   return `${minutes}:${String(seconds).padStart(2, '0')} m/mi`;
@@ -1132,6 +1385,26 @@ elements.routeName.addEventListener('change', (event) => {
 elements.activityType.addEventListener('change', (event) => {
   route = updateRoute(route, { activityType: event.target.value });
   markRouteDirty();
+});
+
+elements.routingProvider.addEventListener('change', (event) => {
+  routingSettings = {
+    ...routingSettings,
+    provider: event.target.value,
+  };
+  saveRoutingSettings();
+  routePlan = createEmptyRoutePlan();
+  renderRoute();
+});
+
+elements.orsApiKey.addEventListener('change', (event) => {
+  routingSettings = {
+    ...routingSettings,
+    orsApiKey: event.target.value.trim(),
+  };
+  saveRoutingSettings();
+  routePlan = createEmptyRoutePlan();
+  renderRoute();
 });
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
