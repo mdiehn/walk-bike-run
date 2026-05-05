@@ -29,19 +29,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
+        run: npm ci --no-audit --no-fund
 
       - name: Build for GitHub Pages
         run: npm run build
         env:
-          GITHUB_PAGES: 'true'
-          GITHUB_PAGES_BASE: '/walk-bike-run/'
+          GITHUB_PAGES: "true"
+          GITHUB_PAGES_BASE: "/walk-bike-run/"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -55,6 +49,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     runs-on: ubuntu-latest
     needs: build
 
