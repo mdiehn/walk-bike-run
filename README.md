@@ -68,6 +68,18 @@ npm test
 npm run build
 ```
 
+## GitHub Pages
+
+This repo includes a GitHub Actions workflow for deploying the Vite build to GitHub Pages.
+
+In GitHub, set:
+
+```text
+Settings -> Pages -> Build and deployment -> Source -> GitHub Actions
+```
+
+The workflow publishes `dist/` from pushes to `main`. See [docs/github-pages.md](docs/github-pages.md).
+
 `npm test` runs only the unit tests under `test/`. Playwright tests live under `e2e/` and run separately so Vitest does not try to load Playwright test files.
 
 For browser smoke tests:
