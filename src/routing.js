@@ -2,18 +2,20 @@ import { activitySpeedMph, distanceMeters } from './route-model.js';
 
 export const ROUTING_PROVIDER_AUTO = 'auto';
 export const ROUTING_PROVIDER_OSRM = 'osrm';
-export const ROUTING_PROVIDER_WORKER = 'worker';
+export const ROUTING_PROVIDER_OPENROUTESERVICE = 'openrouteservice';
 
 const METERS_PER_MILE = 1609.344;
-const OSRM_BASE_URL = 'https://router.project-osrm.org';
+export const DEFAULT_OSRM_BASE_URL = 'https://router.project-osrm.org';
 
-export function resolveRoutingProvider({ provider, routingWorkerUrl } = {}) {
-  if (provider === ROUTING_PROVIDER_WORKER && routingWorkerUrl) {
-    return ROUTING_PROVIDER_WORKER;
+export function resolveRoutingProvider({ provider, orsBaseUrl } = {}) {
+  const hasWorkerUrl = Boolean(String(orsBaseUrl ?? '').trim());
+
+  if (provider === ROUTING_PROVIDER_OPENROUTESERVICE && hasWorkerUrl) {
+    return ROUTING_PROVIDER_OPENROUTESERVICE;
   }
 
-  if (provider === ROUTING_PROVIDER_AUTO && routingWorkerUrl) {
-    return ROUTING_PROVIDER_WORKER;
+  if (provider === ROUTING_PROVIDER_AUTO && hasWorkerUrl) {
+    return ROUTING_PROVIDER_OPENROUTESERVICE;
   }
 
   return ROUTING_PROVIDER_OSRM;
@@ -85,21 +87,30 @@ export function createStraightSegment(leg, activityType) {
 }
 
 async function routeLeg(leg, activityType, provider, settings, fetchImpl) {
-  try {
-    if (provider === ROUTING_PROVIDER_WORKER) {
-      return await routeWorkerLeg(leg, activityType, settings, fetchImpl);
+  const routeProviderLeg = () => {
+    if (provider === ROUTING_PROVIDER_OPENROUTESERVICE) {
+      return routeOpenRouteServiceLeg(leg, activityType, settings, fetchImpl);
     }
-    return await routeOsrmLeg(leg, activityType, fetchImpl);
+    return routeOsrmLeg(leg, activityType, settings, fetchImpl);
+  };
+
+  try {
+    return await routeProviderLeg();
   } catch {
-    return createStraightSegment(leg, activityType);
+    try {
+      return await routeProviderLeg();
+    } catch {
+      return createStraightSegment(leg, activityType);
+    }
   }
 }
 
-async function routeOsrmLeg(leg, activityType, fetchImpl) {
+async function routeOsrmLeg(leg, activityType, settings, fetchImpl) {
   const profile = activityType === 'bike' ? 'bike' : 'foot';
   const from = `${leg.from.lng},${leg.from.lat}`;
   const to = `${leg.to.lng},${leg.to.lat}`;
-  const url = `${OSRM_BASE_URL}/route/v1/${profile}/${from};${to}?overview=full&geometries=geojson`;
+  const baseUrl = trimTrailingSlash(settings.osrmBaseUrl || DEFAULT_OSRM_BASE_URL);
+  const url = `${baseUrl}/route/v1/${profile}/${from};${to}?overview=full&geometries=geojson`;
   const response = await fetchImpl(url);
 
   if (!response.ok) throw new Error('OSRM route request failed.');
@@ -120,13 +131,14 @@ async function routeOsrmLeg(leg, activityType, fetchImpl) {
   };
 }
 
-async function routeWorkerLeg(leg, activityType, settings, fetchImpl) {
-  if (!settings.routingWorkerUrl) {
-    throw new Error('Routing Worker URL is required.');
+async function routeOpenRouteServiceLeg(leg, activityType, settings, fetchImpl) {
+  const baseUrl = trimTrailingSlash(settings.orsBaseUrl);
+  if (!baseUrl) {
+    throw new Error('ORS/HEIGIT Worker base URL is required.');
   }
 
   const profile = activityType === 'bike' ? 'cycling-regular' : 'foot-walking';
-  const response = await fetchImpl(buildWorkerRouteUrl(settings.routingWorkerUrl, profile), {
+  const response = await fetchImpl(`${baseUrl}/route?profile=${profile}`, {
     method: 'POST',
     headers: {
       Accept: 'application/geo+json, application/json',
@@ -140,7 +152,7 @@ async function routeWorkerLeg(leg, activityType, settings, fetchImpl) {
     }),
   });
 
-  if (!response.ok) throw new Error('Routing Worker route request failed.');
+  if (!response.ok) throw new Error('ORS/HEIGIT Worker route request failed.');
 
   const data = await response.json();
   const feature = data.features?.[0];
@@ -148,12 +160,12 @@ async function routeWorkerLeg(leg, activityType, settings, fetchImpl) {
   const summary = feature?.properties?.summary;
 
   if (!coordinates?.length || !summary) {
-    throw new Error('Routing Worker returned no route geometry.');
+    throw new Error('ORS/HEIGIT Worker returned no route geometry.');
   }
 
   return {
     ...leg,
-    provider: ROUTING_PROVIDER_WORKER,
+    provider: ROUTING_PROVIDER_OPENROUTESERVICE,
     fallback: false,
     distance: Number(summary.distance) || 0,
     duration: Number(summary.duration) || 0,
@@ -161,13 +173,6 @@ async function routeWorkerLeg(leg, activityType, settings, fetchImpl) {
   };
 }
 
-export function buildWorkerRouteUrl(workerUrl, profile) {
-  const url = new URL(workerUrl);
-
-  if (url.pathname === '' || url.pathname === '/') {
-    url.pathname = '/route';
-  }
-
-  url.searchParams.set('profile', profile);
-  return url.toString();
+function trimTrailingSlash(value) {
+  return String(value ?? '').trim().replace(/\/+$/u, '');
 }
