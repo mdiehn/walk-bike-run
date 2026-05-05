@@ -873,3 +873,18 @@ select:focus {
   line-height: 1;
   transform-origin: center;
 }
+
+.cloud-storage-panel {
+  border-top: 1px solid #d8dee4;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.cloud-storage-panel h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.6rem;
+}
+
+.cloud-action-row {
+  margin-bottom: 0.5rem;
+}

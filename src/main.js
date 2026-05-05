@@ -41,6 +41,11 @@ import {
   ROUTING_PROVIDER_OPENROUTESERVICE,
 } from './routing.js';
 import { APP_VERSION } from './version.js';
+import {
+  createLocalDownloadProvider,
+  createGoogleDriveProvider,
+  GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY,
+} from './cloudStorage.js';
 
 const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
@@ -68,6 +73,7 @@ let routeDirty = Boolean(persistedAppState.routeDirty);
 let persistedMapView = persistedAppState.mapView;
 let pendingRouteImport = null;
 let pendingLibraryImport = null;
+let cloudSettings = loadCloudSettings();
 let map;
 let pointLayer;
 let lineLayer;
@@ -251,6 +257,22 @@ app.innerHTML = `
               <input id="importLibraryFile" class="sr-only" type="file" accept="application/json,.json" />
             </div>
             <p id="backupStatus" class="hint-text" data-testid="backup-status">Back up saved routes as app JSON.</p>
+            <div class="cloud-storage-panel" aria-label="Google Drive library backup">
+              <h3>Google Drive backup</h3>
+              <label class="field-row compact-field">
+                <span>Google Client ID</span>
+                <input id="googleClientId" type="text" autocomplete="off" placeholder="1234567890-example.apps.googleusercontent.com" data-testid="google-client-id" />
+              </label>
+              <div class="button-row cloud-action-row">
+                <button id="connectGoogleDrive" type="button" class="secondary">Connect Google Drive</button>
+                <button id="disconnectGoogleDrive" type="button" class="secondary">Disconnect</button>
+              </div>
+              <div class="button-row cloud-action-row">
+                <button id="saveLibraryToDrive" type="button" class="secondary">Save library to Google Drive</button>
+                <button id="loadLibraryFromDrive" type="button" class="secondary">Load library from Google Drive</button>
+              </div>
+              <p id="googleDriveStatus" class="hint-text" data-testid="google-drive-status">Google Drive is not connected.</p>
+            </div>
             <div id="importPreview" class="import-preview is-hidden" data-testid="import-preview" hidden>
               <p id="importPreviewText"></p>
               <div class="button-row">
@@ -328,6 +350,12 @@ const elements = {
   ),
   libraryBackupControls: document.querySelector('#libraryBackupControls'),
   backupStatus: document.querySelector('#backupStatus'),
+  googleClientId: document.querySelector('#googleClientId'),
+  connectGoogleDrive: document.querySelector('#connectGoogleDrive'),
+  disconnectGoogleDrive: document.querySelector('#disconnectGoogleDrive'),
+  saveLibraryToDrive: document.querySelector('#saveLibraryToDrive'),
+  loadLibraryFromDrive: document.querySelector('#loadLibraryFromDrive'),
+  googleDriveStatus: document.querySelector('#googleDriveStatus'),
   currentRouteTab: document.querySelector('#currentRouteTab'),
   libraryTab: document.querySelector('#libraryTab'),
   currentRoutePanel: document.querySelector('#currentRoutePanel'),
@@ -433,6 +461,7 @@ function renderRoute() {
   elements.saveRoute.disabled = !routeDirty;
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
   renderRoutingSettings();
+  renderCloudSettings();
   renderBackupPanel();
   persistAppState();
 }
@@ -452,6 +481,131 @@ function renderRoutingSettings() {
   }
 
   elements.routingStatus.textContent = getRoutingStatusText();
+}
+
+function renderCloudSettings() {
+  if (document.activeElement !== elements.googleClientId) {
+    elements.googleClientId.value = cloudSettings.googleClientId;
+  }
+
+  const hasClientId = Boolean(cloudSettings.googleClientId.trim());
+  elements.connectGoogleDrive.disabled = !hasClientId;
+  elements.saveLibraryToDrive.disabled = !hasClientId;
+  elements.loadLibraryFromDrive.disabled = !hasClientId;
+  elements.disconnectGoogleDrive.disabled = !hasClientId;
+
+  if (!hasClientId) {
+    elements.googleDriveStatus.textContent =
+      'Enter a Google OAuth Client ID to enable Drive backup.';
+    return;
+  }
+
+  elements.googleDriveStatus.textContent = cloudSettings.googleDriveConnected
+    ? 'Google Drive is connected for this browser session.'
+    : 'Google Drive is ready. Connect before saving or loading.';
+}
+
+function setGoogleDriveStatus(message) {
+  elements.googleDriveStatus.textContent = message;
+}
+
+function loadCloudSettings(storage = globalThis.localStorage) {
+  return {
+    googleClientId:
+      storage?.getItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY) || '',
+    googleDriveConnected: false,
+  };
+}
+
+function saveCloudSettings(storage = globalThis.localStorage) {
+  storage?.setItem(
+    GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY,
+    cloudSettings.googleClientId,
+  );
+}
+
+function createGoogleDriveLibraryProvider() {
+  return createGoogleDriveProvider({
+    clientId: cloudSettings.googleClientId,
+    onStatus: setGoogleDriveStatus,
+  });
+}
+
+async function connectGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+
+  try {
+    setGoogleDriveStatus('Connecting to Google Drive...');
+    await provider.connect();
+    cloudSettings = { ...cloudSettings, googleDriveConnected: true };
+    renderCloudSettings();
+  } catch (error) {
+    cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+    renderCloudSettings();
+    setGoogleDriveStatus(error.message);
+  }
+}
+
+function disconnectGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+  provider.disconnect();
+  cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+  renderCloudSettings();
+}
+
+async function saveLibraryToGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+  const localDownload = createLocalDownloadProvider();
+  const json = serializeRouteLibraryBackup(routeLibrary, {
+    appVersion: APP_VERSION,
+  });
+
+  try {
+    setGoogleDriveStatus('Saving library to Google Drive...');
+    await provider.saveLibrary(json);
+    cloudSettings = { ...cloudSettings, googleDriveConnected: true };
+    renderCloudSettings();
+    setGoogleDriveStatus(
+      `Saved ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'} to Google Drive.`,
+    );
+  } catch (error) {
+    cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+    renderCloudSettings();
+    setGoogleDriveStatus(`${error.message} Local JSON export still works.`);
+    localDownload.saveLibrary(json);
+  }
+}
+
+async function loadLibraryFromGoogleDrive() {
+  const provider = createGoogleDriveLibraryProvider();
+
+  try {
+    setGoogleDriveStatus('Loading library from Google Drive...');
+    const json = await provider.loadLibrary();
+    const importedLibrary = parseRouteLibraryBackup(json);
+    const shouldReplace = window.confirm(
+      `Replace your current ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'} with ${importedLibrary.length} saved route${importedLibrary.length === 1 ? '' : 's'} from Google Drive?`,
+    );
+
+    if (!shouldReplace) {
+      setGoogleDriveStatus('Google Drive load canceled.');
+      return;
+    }
+
+    routeLibrary = importedLibrary;
+    activeSavedRouteId = null;
+    routeDirty = true;
+    persistLibrary();
+    cloudSettings = { ...cloudSettings, googleDriveConnected: true };
+    renderRoute();
+    setGoogleDriveStatus(
+      `Loaded ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'} from Google Drive.`,
+    );
+  } catch (error) {
+    cloudSettings = { ...cloudSettings, googleDriveConnected: false };
+    renderCloudSettings();
+    setGoogleDriveStatus(error.message);
+  }
 }
 
 function renderPointList() {
@@ -892,17 +1046,7 @@ function exportLibraryJson() {
   const json = serializeRouteLibraryBackup(routeLibrary, {
     appVersion: APP_VERSION,
   });
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const dateStamp = new Date().toISOString().slice(0, 10);
-
-  link.href = url;
-  link.download = `walk-bike-run-routes-${dateStamp}.json`;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  createLocalDownloadProvider().saveLibrary(json);
 
   elements.backupStatus.textContent = `Exported ${routeLibrary.length} saved route${routeLibrary.length === 1 ? '' : 's'}.`;
 }
@@ -1648,6 +1792,19 @@ elements.importLibraryFile.addEventListener('change', async (event) => {
 });
 elements.confirmImportLibrary.addEventListener('click', confirmLibraryImport);
 elements.cancelImportLibrary.addEventListener('click', cancelLibraryImport);
+elements.googleClientId.addEventListener('change', (event) => {
+  cloudSettings = {
+    ...cloudSettings,
+    googleClientId: event.target.value.trim(),
+    googleDriveConnected: false,
+  };
+  saveCloudSettings();
+  renderCloudSettings();
+});
+elements.connectGoogleDrive.addEventListener('click', connectGoogleDrive);
+elements.disconnectGoogleDrive.addEventListener('click', disconnectGoogleDrive);
+elements.saveLibraryToDrive.addEventListener('click', saveLibraryToGoogleDrive);
+elements.loadLibraryFromDrive.addEventListener('click', loadLibraryFromGoogleDrive);
 
 elements.pointList.addEventListener('click', (event) => {
   const deleteButton = event.target.closest('[data-delete-point]');
