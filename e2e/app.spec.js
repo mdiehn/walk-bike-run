@@ -90,6 +90,43 @@ test('keeps cached geometry as stale reference after point edits', async ({
   expect(routeRequests).toBe(0);
 });
 
+
+test('adds map center to a loaded route', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'walkBikeRun.routeLibrary',
+      JSON.stringify([
+        {
+          schemaVersion: 1,
+          id: 'saved-loaded-route',
+          name: 'Loaded route',
+          activityType: 'walk',
+          loop: false,
+          points: [
+            { id: 'loaded-a', name: 'Start', lat: 43.6426, lng: -72.2518 },
+          ],
+          distanceMeters: 0,
+          createdAt: '2026-05-06T12:00:00.000Z',
+          updatedAt: '2026-05-06T12:00:00.000Z',
+        },
+      ]),
+    );
+  });
+
+  await page.goto('/');
+  await openLibraryTab(page);
+  await page.getByRole('button', { name: 'Load' }).click();
+  await openCurrentRouteTab(page);
+
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+  await expect(page.getByTestId('save-status')).toHaveText('Saved');
+
+  await page.getByTestId('add-map-center-button').click();
+
+  await expect(page.getByTestId('point-row')).toHaveCount(2);
+  await expect(page.getByTestId('save-status')).toHaveText('Unsaved changes');
+});
+
 test('adds, renames, reorders, and clears route points', async ({ page }) => {
   await page.goto('/');
 

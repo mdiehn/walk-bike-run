@@ -138,6 +138,7 @@ app.innerHTML = `
           </div>
           <div class="button-row route-action-row">
             <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
+            <button id="addMapCenter" type="button" class="secondary" data-testid="add-map-center-button">Add map center</button>
             <button id="fitRoute" type="button" class="secondary">Fit</button>
             <button id="replotRoute" type="button" class="secondary" data-testid="recalculate-route-button">Recalculate route</button>
             <button id="clearPoints" type="button" class="secondary">Clear</button>
@@ -325,6 +326,7 @@ const elements = {
   undoRoute: document.querySelector('#undoRoute'),
   redoRoute: document.querySelector('#redoRoute'),
   saveRoute: document.querySelector('#saveRoute'),
+  addMapCenter: document.querySelector('#addMapCenter'),
   routingProvider: document.querySelector('#routingProvider'),
   orsBaseUrl: document.querySelector('#orsBaseUrl'),
   routingStatus: document.querySelector('#routingStatus'),
@@ -418,6 +420,13 @@ function addRoutePoint(lat, lng, name) {
   pushUndoSnapshot();
   route = addPoint(route, { lat, lng, name });
   markRouteDirty({ geometryChanged: true });
+}
+
+function addRoutePointAtMapCenter() {
+  if (!map) return;
+
+  const center = map.getCenter();
+  addRoutePoint(center.lat, center.lng, `Point ${route.points.length + 1}`);
 }
 
 function createRouteSnapshot() {
@@ -1861,6 +1870,7 @@ elements.orsBaseUrl.addEventListener('change', (event) => {
   renderRoute();
 });
 
+elements.addMapCenter.addEventListener('click', addRoutePointAtMapCenter);
 elements.fitRoute.addEventListener('click', fitRouteToMap);
 elements.replotRoute.addEventListener('click', recalculateRoute);
 elements.undoRoute.addEventListener('click', undoRouteEdit);

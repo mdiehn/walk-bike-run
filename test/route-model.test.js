@@ -55,6 +55,42 @@ describe('route model', () => {
     expect(deleted.points).toHaveLength(0);
   });
 
+
+  it('creates point IDs without crypto.randomUUID', () => {
+    const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'crypto',
+    );
+
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {
+        getRandomValues(bytes) {
+          bytes.forEach((_, index) => {
+            bytes[index] = index;
+          });
+          return bytes;
+        },
+      },
+    });
+
+    try {
+      const route = addPoint(createRoute(), {
+        name: 'A',
+        lat: 43,
+        lng: -72,
+      });
+
+      expect(route.points[0].id).toBe('00010203-0405-4607-8809-0a0b0c0d0e0f');
+    } finally {
+      if (originalCryptoDescriptor) {
+        Object.defineProperty(globalThis, 'crypto', originalCryptoDescriptor);
+      } else {
+        delete globalThis.crypto;
+      }
+    }
+  });
+
   it('updates a point without mutating the original route', () => {
     const route = createRoute({
       points: [{ id: 'a', name: 'A', lat: 43, lng: -72 }],
