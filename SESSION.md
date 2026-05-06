@@ -39,6 +39,20 @@ Known note:
 
 - `npm run format:check` still reports broad pre-existing formatting drift outside this change; touched files were formatted with Prettier.
 
+Added route-level undo/redo:
+
+- Snapshot stack stores current route, dirty state, and active saved-route linkage before route edits.
+- Undo/Redo buttons live under the main route action row and disable when unavailable.
+- Stack is capped at 50 snapshots.
+- Covered add/undo/redo in Playwright.
+
+Tested again:
+
+- `npm test`
+- `npm run lint`
+- `npm run build`
+- `npm run test:e2e`
+
 ## Current product idea
 
 Build a browser webapp for planning walking, biking, and running routes.

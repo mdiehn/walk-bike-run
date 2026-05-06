@@ -13,6 +13,8 @@ test('loads the route editor shell', async ({ page }) => {
   await expect(page.getByTestId('estimated-time')).toHaveText('0m');
   await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
   await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
+  await expect(page.getByTestId('undo-route-button')).toBeDisabled();
+  await expect(page.getByTestId('redo-route-button')).toBeDisabled();
   await expect(
     page.getByRole('heading', { name: 'Current route backup' }),
   ).toBeVisible();
@@ -113,6 +115,25 @@ test('adds, renames, reorders, and clears route points', async ({ page }) => {
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await expect(page.getByTestId('point-row')).toHaveCount(0);
   await expect(page.getByTestId('point-list')).toContainText('No points yet.');
+});
+
+test('undoes and redoes route edits', async ({ page }) => {
+  await page.goto('/');
+
+  await addPointAtMap(page);
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+  await expect(page.getByTestId('undo-route-button')).toBeEnabled();
+  await expect(page.getByTestId('redo-route-button')).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('point-row')).toHaveCount(0);
+  await expect(page.getByTestId('undo-route-button')).toBeDisabled();
+  await expect(page.getByTestId('redo-route-button')).toBeEnabled();
+
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+  await expect(page.getByTestId('undo-route-button')).toBeEnabled();
+  await expect(page.getByTestId('redo-route-button')).toBeDisabled();
 });
 
 test('guards clearing unsaved route changes', async ({ page }) => {

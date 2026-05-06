@@ -50,6 +50,7 @@ import {
 const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
 const APP_STATE_STORAGE_KEY = 'walkBikeRun.appState';
+const ROUTE_HISTORY_LIMIT = 50;
 
 let routeLibrary = loadRouteLibrary();
 const persistedAppState = loadAppState();
@@ -81,6 +82,8 @@ let mileMarkerLayer;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
 let routingSettings = loadRoutingSettings();
+let undoStack = [];
+let redoStack = [];
 
 const app = document.querySelector('#app');
 
@@ -138,6 +141,10 @@ app.innerHTML = `
             <button id="fitRoute" type="button" class="secondary">Fit</button>
             <button id="replotRoute" type="button" class="secondary" data-testid="recalculate-route-button">Recalculate route</button>
             <button id="clearPoints" type="button" class="secondary">Clear</button>
+          </div>
+          <div class="button-row route-history-row" aria-label="Route edit history">
+            <button id="undoRoute" type="button" class="secondary" data-testid="undo-route-button">Undo</button>
+            <button id="redoRoute" type="button" class="secondary" data-testid="redo-route-button">Redo</button>
           </div>
           <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
           <div class="routing-settings" aria-label="Routing settings">
@@ -315,6 +322,8 @@ const elements = {
   fitRoute: document.querySelector('#fitRoute'),
   replotRoute: document.querySelector('#replotRoute'),
   clearPoints: document.querySelector('#clearPoints'),
+  undoRoute: document.querySelector('#undoRoute'),
+  redoRoute: document.querySelector('#redoRoute'),
   saveRoute: document.querySelector('#saveRoute'),
   routingProvider: document.querySelector('#routingProvider'),
   orsBaseUrl: document.querySelector('#orsBaseUrl'),
@@ -406,8 +415,53 @@ function initMap() {
 }
 
 function addRoutePoint(lat, lng, name) {
+  pushUndoSnapshot();
   route = addPoint(route, { lat, lng, name });
   markRouteDirty({ geometryChanged: true });
+}
+
+function createRouteSnapshot() {
+  return {
+    route: createRoute(route),
+    activeSavedRouteId,
+    routeDirty,
+  };
+}
+
+function pushUndoSnapshot() {
+  undoStack.push(createRouteSnapshot());
+  if (undoStack.length > ROUTE_HISTORY_LIMIT) {
+    undoStack = undoStack.slice(-ROUTE_HISTORY_LIMIT);
+  }
+  redoStack = [];
+}
+
+function restoreRouteSnapshot(snapshot) {
+  route = createRoute(snapshot.route);
+  activeSavedRouteId = snapshot.activeSavedRouteId;
+  routeDirty = Boolean(snapshot.routeDirty);
+  routePlan = createEmptyRoutePlan();
+  routingRequestId += 1;
+  renderRoute();
+}
+
+function undoRouteEdit() {
+  const snapshot = undoStack.pop();
+  if (!snapshot) return;
+
+  redoStack.push(createRouteSnapshot());
+  restoreRouteSnapshot(snapshot);
+}
+
+function redoRouteEdit() {
+  const snapshot = redoStack.pop();
+  if (!snapshot) return;
+
+  undoStack.push(createRouteSnapshot());
+  if (undoStack.length > ROUTE_HISTORY_LIMIT) {
+    undoStack = undoStack.slice(-ROUTE_HISTORY_LIMIT);
+  }
+  restoreRouteSnapshot(snapshot);
 }
 
 function setRoute(
@@ -466,6 +520,8 @@ function renderRoute() {
   elements.replotRoute.disabled =
     route.points.length < 2 || routePlan.status === 'pending';
   elements.replotRoute.classList.toggle('is-dirty', isRouteGeometryStale());
+  elements.undoRoute.disabled = undoStack.length === 0;
+  elements.redoRoute.disabled = redoStack.length === 0;
   renderRoutingSettings();
   renderCloudSettings();
   renderBackupPanel();
@@ -792,6 +848,7 @@ function renderMapRoute() {
 
     marker.on('dragend', (event) => {
       const latLng = event.target.getLatLng();
+      pushUndoSnapshot();
       route = updatePoint(route, point.id, {
         lat: latLng.lat,
         lng: latLng.lng,
@@ -822,6 +879,7 @@ function fitRouteToMap() {
 function saveCurrentRoute({ asCopy = false } = {}) {
   const now = new Date().toISOString();
   let savedRoute;
+  pushUndoSnapshot();
   route = withCurrentRoutedGeometryState(route);
 
   if (asCopy || !activeSavedRouteId) {
@@ -855,6 +913,7 @@ function loadSavedRoute(savedRouteId) {
   if (!savedRoute) return;
   if (!confirmDiscardUnsavedChanges('Loading a saved route')) return;
 
+  pushUndoSnapshot();
   routePlan = createEmptyRoutePlan();
   setRoute(savedRouteToRoute(savedRoute), { savedRouteId, dirty: false });
   fitRouteToMap();
@@ -880,6 +939,7 @@ function updateSavedRouteFromCurrent(savedRouteId) {
   if (!shouldUpdate) return;
 
   const now = new Date().toISOString();
+  pushUndoSnapshot();
   route = withCurrentRoutedGeometryState(route);
   let savedRoute = createSavedRoute(route, { id: savedRouteId, now });
   savedRoute.createdAt = existing.createdAt;
@@ -989,6 +1049,7 @@ function confirmCurrentRouteImport() {
   if (!confirmDiscardUnsavedChanges('Importing this route')) return;
 
   const importedRoute = pendingRouteImport.route;
+  pushUndoSnapshot();
   pendingRouteImport = null;
   setRoute(importedRoute, { savedRouteId: null, dirty: true });
   renderRouteImportPreview();
@@ -1345,6 +1406,7 @@ async function recalculateRoute() {
       return;
 
     const routedGeometry = createRoutedGeometry(plan, routeKey);
+    pushUndoSnapshot();
     route = updateRoute(route, { routedGeometry });
     routePlan = {
       ...plan,
@@ -1767,11 +1829,13 @@ function escapeAttr(value) {
 }
 
 elements.routeName.addEventListener('change', (event) => {
+  pushUndoSnapshot();
   route = updateRoute(route, { name: event.target.value });
   markRouteDirty();
 });
 
 elements.activityType.addEventListener('change', (event) => {
+  pushUndoSnapshot();
   route = updateRoute(route, { activityType: event.target.value });
   markRouteDirty({ geometryChanged: true });
 });
@@ -1798,9 +1862,12 @@ elements.orsBaseUrl.addEventListener('change', (event) => {
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
 elements.replotRoute.addEventListener('click', recalculateRoute);
+elements.undoRoute.addEventListener('click', undoRouteEdit);
+elements.redoRoute.addEventListener('click', redoRouteEdit);
 
 elements.clearPoints.addEventListener('click', () => {
   if (!confirmClearRoute()) return;
+  pushUndoSnapshot();
   setRoute(
     createRoute({ name: 'New route', activityType: route.activityType }),
     {
@@ -1811,6 +1878,7 @@ elements.clearPoints.addEventListener('click', () => {
 });
 
 elements.loopToggle.addEventListener('change', (event) => {
+  pushUndoSnapshot();
   route = setLoop(route, event.target.checked);
   markRouteDirty({ geometryChanged: true });
 });
@@ -1909,6 +1977,7 @@ elements.loadLibraryFromDrive.addEventListener(
 elements.pointList.addEventListener('click', (event) => {
   const deleteButton = event.target.closest('[data-delete-point]');
   if (deleteButton) {
+    pushUndoSnapshot();
     route = deletePoint(route, deleteButton.dataset.deletePoint);
     markRouteDirty({ geometryChanged: true });
     return;
@@ -1916,6 +1985,7 @@ elements.pointList.addEventListener('click', (event) => {
 
   const moveButton = event.target.closest('[data-move-point]');
   if (moveButton) {
+    pushUndoSnapshot();
     route = movePoint(
       route,
       moveButton.dataset.movePoint,
@@ -1929,6 +1999,7 @@ elements.pointList.addEventListener('change', (event) => {
   const input = event.target.closest('[data-rename-point]');
   if (!input) return;
 
+  pushUndoSnapshot();
   route = renamePoint(route, input.dataset.renamePoint, input.value);
   markRouteDirty();
 });

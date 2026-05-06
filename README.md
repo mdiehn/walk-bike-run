@@ -16,6 +16,7 @@ The app currently:
 - shows route points in a list
 - lets you rename, reorder, and delete route points
 - lets you drag map markers to move points
+- lets you undo and redo recent route edits
 - shows straight-line route distance
 - shows simple estimated time and default pace/speed
 - can manually recalculate routed geometry through OSRM or a configured ORS/HEIGIT Worker
