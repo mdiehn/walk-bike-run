@@ -1487,6 +1487,7 @@ function getRoutedGeometryState(routeValue = route) {
   const isStale =
     routedGeometry.isStale ||
     routeValue.points.length < 2 ||
+    routedGeometry.segments.length !== getRouteLegs(routeValue).length ||
     routedGeometry.routeKey !== getRoutePlanKey(routeValue);
 
   return {

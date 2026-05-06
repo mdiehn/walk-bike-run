@@ -53,6 +53,12 @@ Tested again:
 - `npm run build`
 - `npm run test:e2e`
 
+Fixed two-point loop routes:
+
+- Loop return legs now apply with at least two points in distance stats, routing legs, plotting fallback geometry, and GPX export/import.
+- Added unit coverage for two-point loop distance, routing return legs, and GPX round-trip.
+- Re-ran `npm test`, `npm run lint`, `npm run build`, and `npm run test:e2e`.
+
 ## Current product idea
 
 Build a browser webapp for planning walking, biking, and running routes.

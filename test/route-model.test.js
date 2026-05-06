@@ -121,6 +121,19 @@ describe('route model', () => {
     expect(loopDistance).toBeGreaterThan(openDistance);
   });
 
+  it('adds return distance for two-point loops', () => {
+    const route = createRoute({
+      points: [
+        { id: 'a', name: 'A', lat: 43.6426, lng: -72.2518 },
+        { id: 'b', name: 'B', lat: 43.6476, lng: -72.2518 },
+      ],
+    });
+
+    expect(totalDistanceMeters(setLoop(route, true))).toBeCloseTo(
+      totalDistanceMeters(route) * 2,
+    );
+  });
+
   it('uses simple activity speeds for estimates', () => {
     expect(activitySpeedMph('walk')).toBe(3);
     expect(activitySpeedMph('bike')).toBe(12);
@@ -217,5 +230,37 @@ describe('route model', () => {
 
     expect(routeDistanceMeters(route)).toBe(totalDistanceMeters(route));
     expect(routeDurationMinutes(route)).toBe(estimatedDurationMinutes(route));
+  });
+
+  it('marks cached geometry stale when it has the wrong number of loop segments', () => {
+    const route = createRoute({
+      loop: true,
+      points: [
+        { id: 'a', name: 'A', lat: 43, lng: -72 },
+        { id: 'b', name: 'B', lat: 43.01, lng: -72.01 },
+      ],
+      routedGeometry: {
+        routeKey: 'two-point-loop',
+        provider: 'osrm',
+        status: 'routed',
+        distanceMeters: 999999,
+        durationSeconds: 999999,
+        segments: [
+          {
+            fromIndex: 0,
+            toIndex: 1,
+            distance: 999999,
+            duration: 999999,
+            coordinates: [
+              [43, -72],
+              [43.01, -72.01],
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(route.routedGeometry.isStale).toBe(true);
+    expect(routeDistanceMeters(route)).toBe(totalDistanceMeters(route));
   });
 });

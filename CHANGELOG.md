@@ -8,6 +8,7 @@
 - Replace automatic idle routing with an explicit **Recalculate route** action.
 - Keep stale routed geometry from overriding edited route points or point-derived saved stats.
 - Add route-level Undo and Redo buttons with a 50-snapshot history stack.
+- Fix loop-back-to-start behavior for two-point routes across stats, plotting, routing, and GPX export/import.
 
 - Add v0.2.0 stabilization notes.
 - Fix e2e selector ambiguity for the route Clear button after adding Clear selection.

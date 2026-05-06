@@ -28,7 +28,10 @@ export function createRoute({
   const cleanRoutedGeometry = normalizeRoutedGeometry(routedGeometry);
 
   if (cleanRoutedGeometry) {
-    route.routedGeometry = cleanRoutedGeometry;
+    route.routedGeometry = normalizeRoutedGeometryForRoute(
+      route,
+      cleanRoutedGeometry,
+    );
   }
 
   return route;
@@ -52,7 +55,10 @@ export function updateRoute(route, changes = {}) {
     const cleanRoutedGeometry = normalizeRoutedGeometry(changes.routedGeometry);
 
     if (cleanRoutedGeometry) {
-      updated.routedGeometry = cleanRoutedGeometry;
+      updated.routedGeometry = normalizeRoutedGeometryForRoute(
+        updated,
+        cleanRoutedGeometry,
+      );
     } else {
       delete updated.routedGeometry;
     }
@@ -158,7 +164,7 @@ export function totalDistanceMeters(route) {
     total += distanceMeters(points[index - 1], points[index]);
   }
 
-  if (route.loop && points.length > 2) {
+  if (route.loop && points.length >= 2) {
     total += distanceMeters(points[points.length - 1], points[0]);
   }
 
@@ -264,6 +270,23 @@ function normalizeRoutedSegment(segment) {
     duration: normalizeNonNegativeNumber(segment.duration, 0),
     coordinates,
   };
+}
+
+function normalizeRoutedGeometryForRoute(route, routedGeometry) {
+  if (routedGeometry.segments.length === getExpectedRouteSegmentCount(route)) {
+    return routedGeometry;
+  }
+
+  return {
+    ...routedGeometry,
+    isStale: true,
+  };
+}
+
+function getExpectedRouteSegmentCount(route) {
+  const pointCount = route.points.length;
+  if (pointCount < 2) return 0;
+  return pointCount - 1 + (route.loop ? 1 : 0);
 }
 
 function normalizeCoordinate(coordinate) {
