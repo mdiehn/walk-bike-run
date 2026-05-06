@@ -286,7 +286,7 @@ select:focus {
 
 .route-action-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .route-action-row button {
@@ -303,6 +303,16 @@ select:focus {
 #saveRoute.is-dirty {
   background: #1f6feb;
   color: white;
+}
+
+#replotRoute.is-dirty {
+  background: #0f766e;
+  color: white;
+}
+
+#replotRoute.is-dirty:hover,
+#replotRoute.is-dirty:focus-visible {
+  background: #0d5f59;
 }
 
 .save-status {
@@ -537,7 +547,6 @@ select:focus {
   font-size: 0.85rem;
 }
 
-
 .current-route-label {
   align-self: flex-start;
   background: #1f6feb;
@@ -560,7 +569,6 @@ select:focus {
 .saved-route-actions button {
   width: auto;
 }
-
 
 .point-list-header,
 .point-grid {
@@ -690,6 +698,11 @@ select:focus {
   stroke-linejoin: round;
 }
 
+.route-line-stale {
+  opacity: 0.45;
+  stroke-dasharray: 8 10;
+}
+
 .route-marker-shell {
   background: transparent;
   border: 0;
@@ -771,7 +784,7 @@ select:focus {
   }
 
   .route-action-row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .library-table-header,

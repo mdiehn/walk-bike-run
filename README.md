@@ -18,6 +18,9 @@ The app currently:
 - lets you drag map markers to move points
 - shows straight-line route distance
 - shows simple estimated time and default pace/speed
+- can manually recalculate routed geometry through OSRM or a configured ORS/HEIGIT Worker
+- persists valid routed geometry and reuses it on reload
+- keeps stale routed geometry visible as a reference after route edits
 - supports a loop-back-to-start toggle
 - can fit the map to the current route
 - saves routes to a local browser route library
@@ -32,7 +35,7 @@ The app currently:
 - exports and imports the saved route library as app JSON backups
 - has unit and Playwright smoke tests
 
-It does not yet have road/path routing providers, GPS recording, account sync, or PWA caching.
+It does not yet have GPS recording, account sync, or PWA caching.
 
 ## Setup
 

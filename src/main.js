@@ -9,8 +9,8 @@ import {
   deletePoint,
   distanceMeters,
   movePoint,
-  estimatedDurationMinutes,
   renamePoint,
+  routeDurationMinutes,
   setLoop,
   updatePoint,
   updateRoute,
@@ -78,7 +78,6 @@ let map;
 let pointLayer;
 let lineLayer;
 let mileMarkerLayer;
-let routingTimer = null;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
 let routingSettings = loadRoutingSettings();
@@ -137,7 +136,7 @@ app.innerHTML = `
           <div class="button-row route-action-row">
             <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
             <button id="fitRoute" type="button" class="secondary">Fit</button>
-            <button id="replotRoute" type="button" class="secondary">Replot</button>
+            <button id="replotRoute" type="button" class="secondary" data-testid="recalculate-route-button">Recalculate route</button>
             <button id="clearPoints" type="button" class="secondary">Clear</button>
           </div>
           <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
@@ -408,7 +407,7 @@ function initMap() {
 
 function addRoutePoint(lat, lng, name) {
   route = addPoint(route, { lat, lng, name });
-  markRouteDirty();
+  markRouteDirty({ geometryChanged: true });
 }
 
 function setRoute(
@@ -418,10 +417,15 @@ function setRoute(
   route = nextRoute;
   activeSavedRouteId = savedRouteId;
   routeDirty = dirty;
+  routePlan = createEmptyRoutePlan();
   renderRoute();
 }
 
-function markRouteDirty() {
+function markRouteDirty({ geometryChanged = false } = {}) {
+  if (geometryChanged) {
+    route = withStaleRoutedGeometry(route);
+    routePlan = createEmptyRoutePlan();
+  }
   routeDirty = true;
   renderRoute();
 }
@@ -444,7 +448,6 @@ function confirmClearRoute() {
 }
 
 function renderRoute() {
-  scheduleRoutePlanUpdate();
   renderRouteFields();
   renderPointList();
   renderLibraryList();
@@ -460,6 +463,9 @@ function renderRoute() {
   elements.saveRoute.textContent = routeDirty ? 'Save' : 'Saved';
   elements.saveRoute.disabled = !routeDirty;
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
+  elements.replotRoute.disabled =
+    route.points.length < 2 || routePlan.status === 'pending';
+  elements.replotRoute.classList.toggle('is-dirty', isRouteGeometryStale());
   renderRoutingSettings();
   renderCloudSettings();
   renderBackupPanel();
@@ -511,8 +517,7 @@ function setGoogleDriveStatus(message) {
 
 function loadCloudSettings(storage = globalThis.localStorage) {
   return {
-    googleClientId:
-      storage?.getItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY) || '',
+    googleClientId: storage?.getItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY) || '',
     googleDriveConnected: false,
   };
 }
@@ -701,7 +706,7 @@ function renderLibraryList() {
             </div>
             <div class="saved-route-cell" data-testid="saved-route-estimate">
               <span class="cell-label">Estimate</span>
-              <span>${formatLibraryDuration(estimatedDurationMinutes(savedRoute))}</span>
+              <span>${formatLibraryDuration(routeDurationMinutes(savedRoute))}</span>
             </div>
             <div class="saved-route-actions" aria-label="${escapeAttr(savedRoute.name)} actions">
               <button type="button" class="small-button secondary" data-load-saved-route="${escapeAttr(savedRoute.id)}">Load</button>
@@ -755,6 +760,14 @@ function renderMapRoute() {
   lineLayer.clearLayers();
   mileMarkerLayer.clearLayers();
 
+  const staleLinePoints = getStaleRouteCoordinates();
+  if (staleLinePoints.length > 1) {
+    L.polyline(staleLinePoints, {
+      className: 'route-line route-line-stale',
+      weight: 5,
+    }).addTo(lineLayer);
+  }
+
   const linePoints = getDisplayedRouteCoordinates();
 
   if (linePoints.length > 1) {
@@ -783,7 +796,7 @@ function renderMapRoute() {
         lat: latLng.lat,
         lng: latLng.lng,
       });
-      markRouteDirty();
+      markRouteDirty({ geometryChanged: true });
     });
 
     marker.bindTooltip(`${index + 1}. ${point.name}`);
@@ -809,6 +822,7 @@ function fitRouteToMap() {
 function saveCurrentRoute({ asCopy = false } = {}) {
   const now = new Date().toISOString();
   let savedRoute;
+  route = withCurrentRoutedGeometryState(route);
 
   if (asCopy || !activeSavedRouteId) {
     const routeToSave = asCopy
@@ -841,6 +855,7 @@ function loadSavedRoute(savedRouteId) {
   if (!savedRoute) return;
   if (!confirmDiscardUnsavedChanges('Loading a saved route')) return;
 
+  routePlan = createEmptyRoutePlan();
   setRoute(savedRouteToRoute(savedRoute), { savedRouteId, dirty: false });
   fitRouteToMap();
 }
@@ -865,6 +880,7 @@ function updateSavedRouteFromCurrent(savedRouteId) {
   if (!shouldUpdate) return;
 
   const now = new Date().toISOString();
+  route = withCurrentRoutedGeometryState(route);
   let savedRoute = createSavedRoute(route, { id: savedRouteId, now });
   savedRoute.createdAt = existing.createdAt;
   routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, {
@@ -931,7 +947,7 @@ function clearLibraryColumnFilter() {
 }
 
 function exportCurrentRouteJson() {
-  const json = serializeRouteFile(route, {
+  const json = serializeRouteFile(withCurrentRoutedGeometryState(route), {
     appVersion: APP_VERSION,
   });
   const blob = new Blob([json], { type: 'application/json' });
@@ -1005,7 +1021,7 @@ function renderRouteImportPreview() {
 }
 
 function exportCurrentRouteGpx() {
-  const gpx = serializeRouteGpx(route, {
+  const gpx = serializeRouteGpx(withCurrentRoutedGeometryState(route), {
     appVersion: APP_VERSION,
   });
   const blob = new Blob([gpx], { type: 'application/gpx+xml' });
@@ -1308,44 +1324,33 @@ function saveRoutingSettings(storage = globalThis.localStorage) {
   storage?.removeItem('walkBikeRun.orsApiKey');
 }
 
-function scheduleRoutePlanUpdate() {
-  const nextRouteKey = getRoutePlanKey();
+async function recalculateRoute() {
+  if (route.points.length < 2 || routePlan.status === 'pending') return;
 
-  if (routePlan.routeKey === nextRouteKey || route.points.length < 2) {
-    if (route.points.length < 2 && routePlan.status !== 'idle') {
-      routePlan = createEmptyRoutePlan();
-    }
-    return;
-  }
-
-  routePlan = {
-    ...routePlan,
-    routeKey: nextRouteKey,
-    status: 'pending',
-    provider: resolveRoutingProvider(routingSettings),
-    segments: getRouteLegs(route).map((leg) =>
-      createDisplayFallbackSegment(leg),
-    ),
-  };
-
-  window.clearTimeout(routingTimer);
-  const requestId = (routingRequestId += 1);
-  routingTimer = window.setTimeout(() => updateRoutePlan(requestId), 350);
-}
-
-async function updateRoutePlan(requestId) {
   const routeSnapshot = route;
   const routeKey = getRoutePlanKey(routeSnapshot);
+  const requestId = (routingRequestId += 1);
+
+  routePlan = {
+    routeKey,
+    provider: resolveRoutingProvider(routingSettings),
+    status: 'pending',
+    segments: [],
+  };
+  renderRoute();
 
   try {
     const plan = await routeSegments(routeSnapshot, routingSettings);
     if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
       return;
 
+    const routedGeometry = createRoutedGeometry(plan, routeKey);
+    route = updateRoute(route, { routedGeometry });
     routePlan = {
       ...plan,
       routeKey,
     };
+    persistFreshGeometryForCleanSavedRoute(routedGeometry.updatedAt);
     renderRoute();
   } catch {
     if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
@@ -1354,20 +1359,48 @@ async function updateRoutePlan(requestId) {
       routeKey,
       provider: resolveRoutingProvider(routingSettings),
       status: 'failed',
-      segments: getRouteLegs(route).map((leg) =>
-        createDisplayFallbackSegment(leg),
-      ),
+      segments: [],
     };
     renderRoute();
   }
 }
 
-function forceReplotRoute() {
-  window.clearTimeout(routingTimer);
-  routePlan = createEmptyRoutePlan();
-  const requestId = (routingRequestId += 1);
-  updateRoutePlan(requestId);
-  renderRoute();
+function createRoutedGeometry(plan, routeKey) {
+  return {
+    schemaVersion: 1,
+    routeKey,
+    provider: plan.provider,
+    status: plan.status,
+    isStale: false,
+    distanceMeters: plan.segments.reduce(
+      (total, segment) => total + segment.distance,
+      0,
+    ),
+    durationSeconds: plan.segments.reduce(
+      (total, segment) => total + segment.duration,
+      0,
+    ),
+    segments: plan.segments,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function persistFreshGeometryForCleanSavedRoute(now) {
+  if (!activeSavedRouteId || routeDirty) return;
+
+  const existing = getSavedRoute(routeLibrary, activeSavedRouteId);
+  if (!existing) return;
+
+  const savedRoute = createSavedRoute(route, {
+    id: activeSavedRouteId,
+    now,
+  });
+  savedRoute.createdAt = existing.createdAt;
+  routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, {
+    id: savedRoute.id,
+    now,
+  });
+  persistLibrary();
 }
 
 function getRoutePlanKey(routeValue = route) {
@@ -1383,6 +1416,53 @@ function getRoutePlanKey(routeValue = route) {
   const osrmState = routingSettings.osrmBaseUrl || 'default-osrm';
 
   return `${routeValue.activityType}:${routeValue.loop}:${provider}:${workerState}:${osrmState}:${pointKey}`;
+}
+
+function getRoutedGeometryState(routeValue = route) {
+  const routedGeometry = routeValue.routedGeometry;
+  if (!routedGeometry) return null;
+
+  const isStale =
+    routedGeometry.isStale ||
+    routeValue.points.length < 2 ||
+    routedGeometry.routeKey !== getRoutePlanKey(routeValue);
+
+  return {
+    routedGeometry,
+    isStale,
+  };
+}
+
+function getFreshRoutedGeometry(routeValue = route) {
+  const state = getRoutedGeometryState(routeValue);
+  return state && !state.isStale ? state.routedGeometry : null;
+}
+
+function getStaleRoutedGeometry(routeValue = route) {
+  const state = getRoutedGeometryState(routeValue);
+  return state?.isStale ? state.routedGeometry : null;
+}
+
+function isRouteGeometryStale(routeValue = route) {
+  return Boolean(getStaleRoutedGeometry(routeValue));
+}
+
+function withStaleRoutedGeometry(routeValue) {
+  if (!routeValue.routedGeometry) return routeValue;
+  return updateRoute(routeValue, {
+    routedGeometry: {
+      ...routeValue.routedGeometry,
+      isStale: true,
+    },
+  });
+}
+
+function withCurrentRoutedGeometryState(routeValue) {
+  if (!routeValue.routedGeometry) return routeValue;
+  const state = getRoutedGeometryState(routeValue);
+  if (!state?.isStale || routeValue.routedGeometry.isStale) return routeValue;
+
+  return withStaleRoutedGeometry(routeValue);
 }
 
 function createDisplayFallbackSegment(leg) {
@@ -1401,15 +1481,24 @@ function createDisplayFallbackSegment(leg) {
 }
 
 function getDisplayedRouteSegments() {
-  if (routePlan.routeKey === getRoutePlanKey() && routePlan.segments.length) {
-    return routePlan.segments;
+  const routedGeometry = getFreshRoutedGeometry();
+  if (routedGeometry) {
+    return routedGeometry.segments;
   }
 
   return getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg));
 }
 
 function getDisplayedRouteCoordinates() {
-  const segments = getDisplayedRouteSegments();
+  return getSegmentCoordinates(getDisplayedRouteSegments());
+}
+
+function getStaleRouteCoordinates() {
+  const routedGeometry = getStaleRoutedGeometry();
+  return routedGeometry ? getSegmentCoordinates(routedGeometry.segments) : [];
+}
+
+function getSegmentCoordinates(segments) {
   const coordinates = [];
 
   segments.forEach((segment) => {
@@ -1559,13 +1648,21 @@ function getRoutingStatusText() {
       : 'OSRM';
 
   if (route.points.length < 2) return `${providerLabel} routing ready.`;
-  if (routePlan.status === 'pending') return `Routing with ${providerLabel}...`;
+  if (routePlan.status === 'pending')
+    return `Recalculating with ${providerLabel}...`;
+  if (isRouteGeometryStale()) {
+    return `Route changed; showing stale routed geometry until you recalculate.`;
+  }
   if (routePlan.status === 'partial-fallback') {
     return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
   }
   if (routePlan.status === 'failed')
-    return `Routing failed; showing straight-line fallback.`;
-  if (routePlan.status === 'routed') return `Routed with ${providerLabel}.`;
+    return `Routing failed; showing current straight-line route.`;
+  const routedGeometry = getFreshRoutedGeometry();
+  if (routedGeometry?.status === 'partial-fallback') {
+    return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
+  }
+  if (routedGeometry) return `Routed with ${providerLabel}.`;
   return `${providerLabel} routing ready.`;
 }
 
@@ -1676,7 +1773,7 @@ elements.routeName.addEventListener('change', (event) => {
 
 elements.activityType.addEventListener('change', (event) => {
   route = updateRoute(route, { activityType: event.target.value });
-  markRouteDirty();
+  markRouteDirty({ geometryChanged: true });
 });
 
 elements.routingProvider.addEventListener('change', (event) => {
@@ -1700,7 +1797,7 @@ elements.orsBaseUrl.addEventListener('change', (event) => {
 });
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
-elements.replotRoute.addEventListener('click', forceReplotRoute);
+elements.replotRoute.addEventListener('click', recalculateRoute);
 
 elements.clearPoints.addEventListener('click', () => {
   if (!confirmClearRoute()) return;
@@ -1715,7 +1812,7 @@ elements.clearPoints.addEventListener('click', () => {
 
 elements.loopToggle.addEventListener('change', (event) => {
   route = setLoop(route, event.target.checked);
-  markRouteDirty();
+  markRouteDirty({ geometryChanged: true });
 });
 
 elements.saveRoute.addEventListener('click', () => saveCurrentRoute());
@@ -1804,13 +1901,16 @@ elements.googleClientId.addEventListener('change', (event) => {
 elements.connectGoogleDrive.addEventListener('click', connectGoogleDrive);
 elements.disconnectGoogleDrive.addEventListener('click', disconnectGoogleDrive);
 elements.saveLibraryToDrive.addEventListener('click', saveLibraryToGoogleDrive);
-elements.loadLibraryFromDrive.addEventListener('click', loadLibraryFromGoogleDrive);
+elements.loadLibraryFromDrive.addEventListener(
+  'click',
+  loadLibraryFromGoogleDrive,
+);
 
 elements.pointList.addEventListener('click', (event) => {
   const deleteButton = event.target.closest('[data-delete-point]');
   if (deleteButton) {
     route = deletePoint(route, deleteButton.dataset.deletePoint);
-    markRouteDirty();
+    markRouteDirty({ geometryChanged: true });
     return;
   }
 
@@ -1821,7 +1921,7 @@ elements.pointList.addEventListener('click', (event) => {
       moveButton.dataset.movePoint,
       Number(moveButton.dataset.moveDelta),
     );
-    markRouteDirty();
+    markRouteDirty({ geometryChanged: true });
   }
 });
 

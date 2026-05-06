@@ -4,6 +4,7 @@ const MAX_LAT = 90;
 const MIN_LNG = -180;
 const MAX_LNG = 180;
 const METERS_PER_MILE = 1609.344;
+const ROUTED_GEOMETRY_SCHEMA_VERSION = 1;
 
 export const ACTIVITY_SPEEDS_MPH = {
   walk: 3,
@@ -12,21 +13,29 @@ export const ACTIVITY_SPEEDS_MPH = {
 };
 
 export function createRoute({
-  name = "Untitled route",
-  activityType = "walk",
+  name = 'Untitled route',
+  activityType = 'walk',
   loop = false,
   points = [],
+  routedGeometry = null,
 } = {}) {
-  return {
+  const route = {
     name: normalizeRouteName(name),
     activityType: normalizeActivityType(activityType),
     loop,
     points: points.map(normalizePoint),
   };
+  const cleanRoutedGeometry = normalizeRoutedGeometry(routedGeometry);
+
+  if (cleanRoutedGeometry) {
+    route.routedGeometry = cleanRoutedGeometry;
+  }
+
+  return route;
 }
 
 export function updateRoute(route, changes = {}) {
-  return {
+  const updated = {
     ...route,
     name:
       changes.name === undefined
@@ -38,6 +47,18 @@ export function updateRoute(route, changes = {}) {
         : normalizeActivityType(changes.activityType),
     loop: changes.loop === undefined ? route.loop : Boolean(changes.loop),
   };
+
+  if (Object.hasOwn(changes, 'routedGeometry')) {
+    const cleanRoutedGeometry = normalizeRoutedGeometry(changes.routedGeometry);
+
+    if (cleanRoutedGeometry) {
+      updated.routedGeometry = cleanRoutedGeometry;
+    } else {
+      delete updated.routedGeometry;
+    }
+  }
+
+  return updated;
 }
 
 export function addPoint(route, point) {
@@ -109,6 +130,25 @@ export function estimatedDurationMinutes(route) {
   return (distanceMiles / speedMph) * 60;
 }
 
+export function routeDistanceMeters(route) {
+  return !route.routedGeometry?.isStale
+    ? (route.routedGeometry?.distanceMeters ?? totalDistanceMeters(route))
+    : totalDistanceMeters(route);
+}
+
+export function routeDurationMinutes(route) {
+  const durationSeconds = route.routedGeometry?.durationSeconds;
+  if (
+    !route.routedGeometry?.isStale &&
+    Number.isFinite(durationSeconds) &&
+    durationSeconds >= 0
+  ) {
+    return durationSeconds / 60;
+  }
+
+  return estimatedDurationMinutes(route);
+}
+
 export function totalDistanceMeters(route) {
   const points = route.points;
   if (points.length < 2) return 0;
@@ -138,21 +178,58 @@ export function distanceMeters(a, b) {
   return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+export function normalizeRoutedGeometry(routedGeometry) {
+  if (!routedGeometry || typeof routedGeometry !== 'object') return null;
+
+  const routeKey = String(routedGeometry.routeKey ?? '').trim();
+  if (!routeKey) return null;
+
+  const segments = Array.isArray(routedGeometry.segments)
+    ? routedGeometry.segments.map(normalizeRoutedSegment).filter(Boolean)
+    : [];
+
+  if (segments.length === 0) return null;
+
+  const distanceMetersValue = normalizeNonNegativeNumber(
+    routedGeometry.distanceMeters,
+    segments.reduce((total, segment) => total + segment.distance, 0),
+  );
+  const durationSeconds = normalizeNonNegativeNumber(
+    routedGeometry.durationSeconds,
+    segments.reduce((total, segment) => total + segment.duration, 0),
+  );
+
+  return {
+    schemaVersion: ROUTED_GEOMETRY_SCHEMA_VERSION,
+    routeKey,
+    provider:
+      routedGeometry.provider === null || routedGeometry.provider === undefined
+        ? null
+        : String(routedGeometry.provider),
+    status: normalizeRoutedStatus(routedGeometry.status),
+    isStale: Boolean(routedGeometry.isStale),
+    distanceMeters: distanceMetersValue,
+    durationSeconds,
+    segments,
+    updatedAt: normalizeDate(routedGeometry.updatedAt),
+  };
+}
+
 function normalizePoint(point) {
   if (!point) {
-    throw new Error("Route point is required.");
+    throw new Error('Route point is required.');
   }
 
   const lat = Number(point.lat);
   const lng = Number(point.lng);
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    throw new Error("Route points need numeric lat and lng values.");
+    throw new Error('Route points need numeric lat and lng values.');
   }
 
   if (lat < MIN_LAT || lat > MAX_LAT || lng < MIN_LNG || lng > MAX_LNG) {
     throw new Error(
-      "Route point coordinates are outside valid latitude/longitude ranges.",
+      'Route point coordinates are outside valid latitude/longitude ranges.',
     );
   }
 
@@ -164,17 +241,78 @@ function normalizePoint(point) {
   };
 }
 
+function normalizeRoutedSegment(segment) {
+  if (!segment || typeof segment !== 'object') return null;
+
+  const coordinates = Array.isArray(segment.coordinates)
+    ? segment.coordinates.map(normalizeCoordinate).filter(Boolean)
+    : [];
+
+  if (coordinates.length < 2) return null;
+
+  return {
+    fromIndex: normalizeInteger(segment.fromIndex, 0),
+    toIndex: normalizeInteger(segment.toIndex, 0),
+    label: String(segment.label ?? ''),
+    isLoopReturn: Boolean(segment.isLoopReturn),
+    provider:
+      segment.provider === null || segment.provider === undefined
+        ? null
+        : String(segment.provider),
+    fallback: Boolean(segment.fallback),
+    distance: normalizeNonNegativeNumber(segment.distance, 0),
+    duration: normalizeNonNegativeNumber(segment.duration, 0),
+    coordinates,
+  };
+}
+
+function normalizeCoordinate(coordinate) {
+  if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+
+  const lat = Number(coordinate[0]);
+  const lng = Number(coordinate[1]);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < MIN_LAT || lat > MAX_LAT || lng < MIN_LNG || lng > MAX_LNG) {
+    return null;
+  }
+
+  return [lat, lng];
+}
+
+function normalizeRoutedStatus(status) {
+  return ['routed', 'partial-fallback', 'failed'].includes(status)
+    ? status
+    : 'routed';
+}
+
+function normalizeInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : fallback;
+}
+
+function normalizeNonNegativeNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function normalizeDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString();
+  return date.toISOString();
+}
+
 function normalizeRouteName(name) {
-  return String(name ?? "").trim() || "Untitled route";
+  return String(name ?? '').trim() || 'Untitled route';
 }
 
 function normalizePointName(name) {
-  return String(name ?? "").trim() || "Map point";
+  return String(name ?? '').trim() || 'Map point';
 }
 
 function normalizeActivityType(activityType) {
-  const normalized = String(activityType ?? "walk").toLowerCase();
-  return ["walk", "bike", "run"].includes(normalized) ? normalized : "walk";
+  const normalized = String(activityType ?? 'walk').toLowerCase();
+  return ['walk', 'bike', 'run'].includes(normalized) ? normalized : 'walk';
 }
 
 function clamp(value, min, max) {

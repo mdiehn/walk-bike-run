@@ -18,6 +18,27 @@ The first scaffold was created as a small Vite + Leaflet app with tests and CI w
 
 Current intent: get the foundation clean before adding route-planning features.
 
+## Latest session note
+
+Changed routed geometry from an auto-refreshed UI cache into persisted route data:
+
+- `route.routedGeometry` is normalized with a route key, segments, distance, duration, provider, update time, and `isStale`.
+- Valid cached geometry draws immediately on reload and does not call the routing service.
+- Point/activity/loop edits keep the old geometry as a dashed stale reference and show **Recalculate route**.
+- Manual recalculation replaces the cache, updates routed stats, clears stale geometry state, and persists clean saved-route cache updates when safe.
+- Stale geometry does not replace edited points or point-derived saved stats.
+
+Tested:
+
+- `npm test`
+- `npm run lint`
+- `npm run build`
+- `npm run test:e2e`
+
+Known note:
+
+- `npm run format:check` still reports broad pre-existing formatting drift outside this change; touched files were formatted with Prettier.
+
 ## Current product idea
 
 Build a browser webapp for planning walking, biking, and running routes.

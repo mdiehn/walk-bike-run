@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { addPoint, createRoute } from '../src/route-model.js';
+import {
+  addPoint,
+  createRoute,
+  totalDistanceMeters,
+} from '../src/route-model.js';
 import {
   createSavedRoute,
   deleteSavedRoute,
@@ -33,7 +37,10 @@ describe('route library', () => {
       points: [{ id: 'a', name: 'A', lat: 43, lng: -72 }],
     });
 
-    const savedRoute = createSavedRoute(route, { id: 'saved-a', now: '2026-05-03T12:00:00.000Z' });
+    const savedRoute = createSavedRoute(route, {
+      id: 'saved-a',
+      now: '2026-05-03T12:00:00.000Z',
+    });
     saveRouteLibrary([savedRoute], storage);
 
     expect(loadRouteLibrary(storage)).toEqual([savedRoute]);
@@ -80,7 +87,10 @@ describe('route library', () => {
 
     saveRouteLibrary([first, second], storage);
 
-    expect(loadRouteLibrary(storage).map((entry) => entry.id)).toEqual(['saved-a', 'saved-b']);
+    expect(loadRouteLibrary(storage).map((entry) => entry.id)).toEqual([
+      'saved-a',
+      'saved-b',
+    ]);
   });
 
   it('updates an existing saved route in place without changing its created date', () => {
@@ -96,14 +106,23 @@ describe('route library', () => {
       id: 'saved-c',
       now: '2026-05-03T13:00:00.000Z',
     });
-    const updatedRoute = addPoint(savedRouteToRoute(original), { id: 'p1', name: 'Point 1', lat: 43, lng: -72 });
+    const updatedRoute = addPoint(savedRouteToRoute(original), {
+      id: 'p1',
+      name: 'Point 1',
+      lat: 43,
+      lng: -72,
+    });
 
     const library = upsertSavedRoute([first, original, third], updatedRoute, {
       id: 'saved-b',
       now: '2026-05-03T14:00:00.000Z',
     });
 
-    expect(library.map((entry) => entry.id)).toEqual(['saved-a', 'saved-b', 'saved-c']);
+    expect(library.map((entry) => entry.id)).toEqual([
+      'saved-a',
+      'saved-b',
+      'saved-c',
+    ]);
     expect(library[1].createdAt).toBe('2026-05-03T12:30:00.000Z');
     expect(library[1].updatedAt).toBe('2026-05-03T14:00:00.000Z');
     expect(library[1].points).toHaveLength(1);
@@ -115,9 +134,13 @@ describe('route library', () => {
       now: '2026-05-03T12:00:00.000Z',
     });
 
-    const library = upsertSavedRoute([existing], createRoute({ name: 'New route' }), {
-      now: '2026-05-03T13:00:00.000Z',
-    });
+    const library = upsertSavedRoute(
+      [existing],
+      createRoute({ name: 'New route' }),
+      {
+        now: '2026-05-03T13:00:00.000Z',
+      },
+    );
 
     expect(library).toHaveLength(2);
     expect(library[0].name).toBe('New route');
@@ -139,7 +162,50 @@ describe('route library', () => {
     });
 
     expect(duplicated).toHaveLength(3);
-    expect(duplicated.map((entry) => entry.name)).toEqual(['First', 'First copy', 'Bike loop']);
+    expect(duplicated.map((entry) => entry.name)).toEqual([
+      'First',
+      'First copy',
+      'Bike loop',
+    ]);
+  });
+
+  it('saves edited points without letting stale geometry replace route stats', () => {
+    const route = createRoute({
+      points: [
+        { id: 'a', name: 'A', lat: 43, lng: -72 },
+        { id: 'b', name: 'B', lat: 43.01, lng: -72.01 },
+      ],
+      routedGeometry: {
+        routeKey: 'old-route-key',
+        provider: 'osrm',
+        status: 'routed',
+        isStale: true,
+        distanceMeters: 999999,
+        durationSeconds: 999999,
+        updatedAt: '2026-05-03T12:00:00.000Z',
+        segments: [
+          {
+            fromIndex: 0,
+            toIndex: 1,
+            distance: 999999,
+            duration: 999999,
+            coordinates: [
+              [42, -71],
+              [42.01, -71.01],
+            ],
+          },
+        ],
+      },
+    });
+
+    const savedRoute = createSavedRoute(route, {
+      id: 'saved-stale',
+      now: '2026-05-03T12:00:00.000Z',
+    });
+
+    expect(savedRoute.points).toEqual(route.points);
+    expect(savedRoute.routedGeometry.isStale).toBe(true);
+    expect(savedRoute.distanceMeters).toBe(totalDistanceMeters(route));
   });
 
   it('deletes saved routes without reordering the remaining routes', () => {

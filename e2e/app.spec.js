@@ -28,6 +28,66 @@ test('updates route stats when activity changes', async ({ page }) => {
   await expect(page.getByTestId('pace-text')).toHaveText('12.0 mph');
 });
 
+test('uses cached routed geometry on reload without routing again', async ({
+  page,
+}) => {
+  let routeRequests = 0;
+  const cachedRoute = createCachedRouteFixture();
+  await page.route('https://router.project-osrm.org/**', async (route) => {
+    routeRequests += 1;
+    await route.abort();
+  });
+  await page.addInitScript((route) => {
+    localStorage.setItem(
+      'walkBikeRun.appState',
+      JSON.stringify({
+        route,
+        routeDirty: false,
+        activeRouteTab: 'current',
+      }),
+    );
+  }, cachedRoute);
+
+  await page.goto('/');
+
+  await expect(page.getByTestId('distance-text')).toHaveText('1.55 mi');
+  await expect(page.getByTestId('estimated-time')).toHaveText('30m');
+  await expect(page.getByTestId('routing-status')).toHaveText(
+    'Routed with OSRM.',
+  );
+  expect(routeRequests).toBe(0);
+});
+
+test('keeps cached geometry as stale reference after point edits', async ({
+  page,
+}) => {
+  let routeRequests = 0;
+  const cachedRoute = createCachedRouteFixture();
+  await page.route('https://router.project-osrm.org/**', async (route) => {
+    routeRequests += 1;
+    await route.abort();
+  });
+  await page.addInitScript((route) => {
+    localStorage.setItem(
+      'walkBikeRun.appState',
+      JSON.stringify({
+        route,
+        routeDirty: false,
+        activeRouteTab: 'current',
+      }),
+    );
+  }, cachedRoute);
+
+  await page.goto('/');
+  await addPointAtMap(page);
+
+  await expect(page.getByTestId('routing-status')).toHaveText(
+    'Route changed; showing stale routed geometry until you recalculate.',
+  );
+  await expect(page.getByTestId('recalculate-route-button')).toBeEnabled();
+  expect(routeRequests).toBe(0);
+});
+
 test('adds, renames, reorders, and clears route points', async ({ page }) => {
   await page.goto('/');
 
@@ -547,6 +607,47 @@ function createRouteFileFixture(routeName) {
           name: 'Imported route point',
           lat: 43.6426,
           lng: -72.2518,
+        },
+      ],
+    },
+  };
+}
+
+function createCachedRouteFixture() {
+  const routeKey =
+    'walk:false:osrm:no-worker-url:default-osrm:cached-a:43.000000,-72.000000|cached-b:43.010000,-72.010000';
+
+  return {
+    name: 'Cached routed walk',
+    activityType: 'walk',
+    loop: false,
+    points: [
+      { id: 'cached-a', name: 'Start', lat: 43, lng: -72 },
+      { id: 'cached-b', name: 'Finish', lat: 43.01, lng: -72.01 },
+    ],
+    routedGeometry: {
+      schemaVersion: 1,
+      routeKey,
+      provider: 'osrm',
+      status: 'routed',
+      isStale: false,
+      distanceMeters: 2500,
+      durationSeconds: 1800,
+      updatedAt: '2026-05-05T12:00:00.000Z',
+      segments: [
+        {
+          fromIndex: 0,
+          toIndex: 1,
+          label: 'From prev',
+          provider: 'osrm',
+          fallback: false,
+          distance: 2500,
+          duration: 1800,
+          coordinates: [
+            [43, -72],
+            [43.005, -72.004],
+            [43.01, -72.01],
+          ],
         },
       ],
     },
