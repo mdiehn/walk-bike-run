@@ -18,6 +18,47 @@ The first scaffold was created as a small Vite + Leaflet app with tests and CI w
 
 Current intent: get the foundation clean before adding route-planning features.
 
+## Latest session note
+
+Changed routed geometry from an auto-refreshed UI cache into persisted route data:
+
+- `route.routedGeometry` is normalized with a route key, segments, distance, duration, provider, update time, and `isStale`.
+- Valid cached geometry draws immediately on reload and does not call the routing service.
+- Point/activity/loop edits keep the old geometry as a dashed stale reference and show **Recalculate route**.
+- Manual recalculation replaces the cache, updates routed stats, clears stale geometry state, and persists clean saved-route cache updates when safe.
+- Stale geometry does not replace edited points or point-derived saved stats.
+
+Tested:
+
+- `npm test`
+- `npm run lint`
+- `npm run build`
+- `npm run test:e2e`
+
+Known note:
+
+- `npm run format:check` still reports broad pre-existing formatting drift outside this change; touched files were formatted with Prettier.
+
+Added route-level undo/redo:
+
+- Snapshot stack stores current route, dirty state, and active saved-route linkage before route edits.
+- Undo/Redo buttons live under the main route action row and disable when unavailable.
+- Stack is capped at 50 snapshots.
+- Covered add/undo/redo in Playwright.
+
+Tested again:
+
+- `npm test`
+- `npm run lint`
+- `npm run build`
+- `npm run test:e2e`
+
+Fixed two-point loop routes:
+
+- Loop return legs now apply with at least two points in distance stats, routing legs, plotting fallback geometry, and GPX export/import.
+- Added unit coverage for two-point loop distance, routing return legs, and GPX round-trip.
+- Re-ran `npm test`, `npm run lint`, `npm run build`, and `npm run test:e2e`.
+
 ## Current product idea
 
 Build a browser webapp for planning walking, biking, and running routes.

@@ -39,7 +39,12 @@ describe('routing providers', () => {
 
   it('builds adjacent route legs and loop return legs', () => {
     expect(getRouteLegs(route)).toHaveLength(1);
-    expect(getRouteLegs(setLoop(route, true))).toHaveLength(1);
+    expect(getRouteLegs(setLoop(route, true))).toHaveLength(2);
+    expect(getRouteLegs(setLoop(route, true)).at(-1)).toMatchObject({
+      fromIndex: 1,
+      toIndex: 0,
+      isLoopReturn: true,
+    });
 
     const loopRoute = createRoute({
       loop: true,
@@ -65,7 +70,9 @@ describe('routing providers', () => {
 
   it('routes ORS/HEIGIT Worker GeoJSON responses', async () => {
     const fetchImpl = async (url, options) => {
-      expect(url).toBe('https://example.workers.dev/route?profile=cycling-regular');
+      expect(url).toBe(
+        'https://example.workers.dev/route?profile=cycling-regular',
+      );
       expect(options.headers.Authorization).toBeUndefined();
       expect(JSON.parse(options.body).coordinates).toHaveLength(2);
 

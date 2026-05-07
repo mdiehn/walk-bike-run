@@ -34,7 +34,7 @@ The exported route includes:
 
 The GPX export uses a `<rte>` route with `<rtept>` points.
 
-For loop routes with at least three points, export adds a final repeated start point so other GPX tools can see the loop shape. The app removes that repeated final point when importing the GPX again and restores the loop flag.
+For loop routes with at least two points, export adds a final repeated start point so other GPX tools can see the loop shape. The app removes that repeated final point when importing the GPX again and restores the loop flag.
 
 **Import current route GPX** accepts simple GPX route points (`<rtept>`) and track points (`<trkpt>`). Imported GPX is converted into the current Walk Bike Run route model.
 

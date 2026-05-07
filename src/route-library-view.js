@@ -1,4 +1,4 @@
-import { estimatedDurationMinutes } from './route-model.js';
+import { routeDurationMinutes } from './route-model.js';
 
 const SORTERS = {
   saved: () => 0,
@@ -6,10 +6,7 @@ const SORTERS = {
   distance: (left, right) =>
     compareNumbers(left.distanceMeters, right.distanceMeters),
   estimatedTime: (left, right) =>
-    compareNumbers(
-      estimatedDurationMinutes(left),
-      estimatedDurationMinutes(right),
-    ),
+    compareNumbers(routeDurationMinutes(left), routeDurationMinutes(right)),
   points: (left, right) =>
     compareNumbers(left.points.length, right.points.length),
   updated: (left, right) => compareDates(left.updatedAt, right.updatedAt),
@@ -83,7 +80,7 @@ function routeMatchesFilters(
     return false;
   }
 
-  if (!durationMatchesFilter(estimatedDurationMinutes(route), durationFilter)) {
+  if (!durationMatchesFilter(routeDurationMinutes(route), durationFilter)) {
     return false;
   }
 

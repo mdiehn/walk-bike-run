@@ -12,7 +12,16 @@ test('loads the route editor shell', async ({ page }) => {
   await expect(page.getByTestId('distance-text')).toHaveText('0.00 mi');
   await expect(page.getByTestId('estimated-time')).toHaveText('0m');
   await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
+  await expect(page.getByRole('tab', { name: 'Editor' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Following' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Following' }).click();
+  await expect(
+    page.getByText('Following controls will live here.'),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'Editor' }).click();
+  await expect(page.getByTestId('undo-route-button')).toBeDisabled();
+  await expect(page.getByTestId('redo-route-button')).toBeDisabled();
   await expect(
     page.getByRole('heading', { name: 'Current route backup' }),
   ).toBeVisible();
@@ -26,6 +35,108 @@ test('updates route stats when activity changes', async ({ page }) => {
   await expect(page.getByTestId('pace-text')).toHaveText('10:00 m/mi');
   await page.locator('#activityType').selectOption('bike');
   await expect(page.getByTestId('pace-text')).toHaveText('12.0 mph');
+});
+
+test('uses cached routed geometry on reload without routing again', async ({
+  page,
+}) => {
+  let routeRequests = 0;
+  const cachedRoute = createCachedRouteFixture();
+  await page.route('https://router.project-osrm.org/**', async (route) => {
+    routeRequests += 1;
+    await route.abort();
+  });
+  await page.addInitScript((route) => {
+    localStorage.setItem(
+      'walkBikeRun.appState',
+      JSON.stringify({
+        route,
+        routeDirty: false,
+        activeRouteTab: 'current',
+      }),
+    );
+  }, cachedRoute);
+
+  await page.goto('/');
+
+  await expect(page.getByTestId('distance-text')).toHaveText('1.55 mi');
+  await expect(page.getByTestId('estimated-time')).toHaveText('30m');
+  await expect(page.getByTestId('routing-status')).toHaveText(
+    'Routed with OSRM.',
+  );
+  expect(routeRequests).toBe(0);
+});
+
+test('keeps cached geometry as stale reference after point edits', async ({
+  page,
+}) => {
+  let routeRequests = 0;
+  const cachedRoute = createCachedRouteFixture();
+  await page.route('https://router.project-osrm.org/**', async (route) => {
+    routeRequests += 1;
+    await route.abort();
+  });
+  await page.addInitScript((route) => {
+    localStorage.setItem(
+      'walkBikeRun.appState',
+      JSON.stringify({
+        route,
+        routeDirty: false,
+        activeRouteTab: 'current',
+      }),
+    );
+  }, cachedRoute);
+
+  await page.goto('/');
+  await addPointAtMap(page);
+
+  await expect(page.getByTestId('routing-status')).toHaveText(
+    'Route changed; showing stale routed geometry until you replot.',
+  );
+  await expect(page.getByTestId('recalculate-route-button')).toBeEnabled();
+  expect(routeRequests).toBe(0);
+});
+
+test('adds a map point to a loaded route', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'walk-bike-run.routeLibrary.v1',
+      JSON.stringify([
+        {
+          schemaVersion: 1,
+          id: 'saved-loaded-route',
+          name: 'Loaded route',
+          activityType: 'walk',
+          loop: false,
+          points: [
+            { id: 'loaded-a', name: 'Start', lat: 43.6426, lng: -72.2518 },
+          ],
+          distanceMeters: 0,
+          createdAt: '2026-05-06T12:00:00.000Z',
+          updatedAt: '2026-05-06T12:00:00.000Z',
+        },
+      ]),
+    );
+  });
+
+  await page.goto('/');
+  await openLibraryTab(page);
+  const loadedRouteRow = page.locator(
+    '[data-saved-route-id="saved-loaded-route"]',
+  );
+  await expect(loadedRouteRow).toBeVisible();
+  await loadedRouteRow
+    .locator('[data-load-saved-route="saved-loaded-route"]')
+    .click();
+  await openCurrentRouteTab(page);
+
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+  await expect(page.getByTestId('save-status')).toHaveText('Saved');
+
+  await addPointAtMap(page);
+
+  await expect(page.getByTestId('point-row')).toHaveCount(2);
+  await expect(page.getByTestId('save-status')).toHaveText('Unsaved changes');
 });
 
 test('adds, renames, reorders, and clears route points', async ({ page }) => {
@@ -53,6 +164,25 @@ test('adds, renames, reorders, and clears route points', async ({ page }) => {
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await expect(page.getByTestId('point-row')).toHaveCount(0);
   await expect(page.getByTestId('point-list')).toContainText('No points yet.');
+});
+
+test('undoes and redoes route edits', async ({ page }) => {
+  await page.goto('/');
+
+  await addPointAtMap(page);
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+  await expect(page.getByTestId('undo-route-button')).toBeEnabled();
+  await expect(page.getByTestId('redo-route-button')).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('point-row')).toHaveCount(0);
+  await expect(page.getByTestId('undo-route-button')).toBeDisabled();
+  await expect(page.getByTestId('redo-route-button')).toBeEnabled();
+
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+  await expect(page.getByTestId('undo-route-button')).toBeEnabled();
+  await expect(page.getByTestId('redo-route-button')).toBeDisabled();
 });
 
 test('guards clearing unsaved route changes', async ({ page }) => {
@@ -489,7 +619,7 @@ async function clearCurrentRoute(page) {
 }
 
 async function openCurrentRouteTab(page) {
-  await page.getByRole('tab', { name: 'Current route' }).click();
+  await page.getByRole('tab', { name: 'Route' }).click();
 }
 
 async function openLibraryTab(page) {
@@ -547,6 +677,47 @@ function createRouteFileFixture(routeName) {
           name: 'Imported route point',
           lat: 43.6426,
           lng: -72.2518,
+        },
+      ],
+    },
+  };
+}
+
+function createCachedRouteFixture() {
+  const routeKey =
+    'walk:false:osrm:no-worker-url:default-osrm:cached-a:43.000000,-72.000000|cached-b:43.010000,-72.010000';
+
+  return {
+    name: 'Cached routed walk',
+    activityType: 'walk',
+    loop: false,
+    points: [
+      { id: 'cached-a', name: 'Start', lat: 43, lng: -72 },
+      { id: 'cached-b', name: 'Finish', lat: 43.01, lng: -72.01 },
+    ],
+    routedGeometry: {
+      schemaVersion: 1,
+      routeKey,
+      provider: 'osrm',
+      status: 'routed',
+      isStale: false,
+      distanceMeters: 2500,
+      durationSeconds: 1800,
+      updatedAt: '2026-05-05T12:00:00.000Z',
+      segments: [
+        {
+          fromIndex: 0,
+          toIndex: 1,
+          label: 'From prev',
+          provider: 'osrm',
+          fallback: false,
+          distance: 2500,
+          duration: 1800,
+          coordinates: [
+            [43, -72],
+            [43.005, -72.004],
+            [43.01, -72.01],
+          ],
         },
       ],
     },

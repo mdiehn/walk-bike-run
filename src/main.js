@@ -9,8 +9,8 @@ import {
   deletePoint,
   distanceMeters,
   movePoint,
-  estimatedDurationMinutes,
   renamePoint,
+  routeDurationMinutes,
   setLoop,
   updatePoint,
   updateRoute,
@@ -50,13 +50,18 @@ import {
 const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
 const APP_STATE_STORAGE_KEY = 'walkBikeRun.appState';
+const ROUTE_HISTORY_LIMIT = 50;
 
 let routeLibrary = loadRouteLibrary();
 const persistedAppState = loadAppState();
 let route =
   persistedAppState.route ??
   createRoute({ name: 'New route', activityType: 'walk' });
-let activeRouteTab = persistedAppState.activeRouteTab ?? 'current';
+let activeRouteTab = normalizeRouteTab(persistedAppState.activeRouteTab);
+let activeRouteModeTab = normalizeRouteModeTab(
+  persistedAppState.activeRouteModeTab,
+);
+let pointTouchMode = normalizePointTouchMode(persistedAppState.pointTouchMode);
 let librarySortBy = 'saved';
 let librarySortDirection = DEFAULT_LIBRARY_SORT_DIRECTIONS.saved;
 let libraryActivityFilter = 'all';
@@ -78,10 +83,11 @@ let map;
 let pointLayer;
 let lineLayer;
 let mileMarkerLayer;
-let routingTimer = null;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
 let routingSettings = loadRoutingSettings();
+let undoStack = [];
+let redoStack = [];
 
 const app = document.querySelector('#app');
 
@@ -91,7 +97,7 @@ app.innerHTML = `
       <div>
         <p class="eyebrow">Walk Bike Run</p>
         <h1>Build a route.</h1>
-        <p class="subtitle">Click or tap the map to add points. Drag markers to move them.</p>
+        <p class="subtitle">Tap the map to add points. Drag markers to move them.</p>
       </div>
       <div class="version-pill" title="App version">v${APP_VERSION}</div>
     </header>
@@ -103,58 +109,55 @@ app.innerHTML = `
 
       <aside class="panel" aria-label="Route controls">
         <section class="panel-section route-summary-section">
-          <h2>Route</h2>
-          <label class="field-row">
-            <span class="route-name-label">Route name <span class="route-name-note">change and save to copy</span></span>
-            <input id="routeName" type="text" autocomplete="off" />
-          </label>
-          <label class="field-row">
-            <span>Activity</span>
-            <select id="activityType">
-              <option value="walk">Walk</option>
-              <option value="bike">Bike</option>
-              <option value="run">Run</option>
-            </select>
-          </label>
-          <label class="checkbox-row">
-            <input id="loopToggle" type="checkbox" />
-            Loop back to start
-          </label>
-          <div class="route-stats" aria-label="Route stats">
-            <div class="route-stat-card">
-              <span>Dist</span>
-              <strong id="distanceText" data-testid="distance-text">0.00 mi</strong>
-            </div>
-            <div class="route-stat-card">
-              <span>Time</span>
-              <strong id="estimatedTimeText" data-testid="estimated-time">0m</strong>
-            </div>
-            <div class="route-stat-card">
-              <span>Pace</span>
-              <strong id="paceText" data-testid="pace-text">20:00 m/mi</strong>
-            </div>
+          <div class="tab-list route-mode-tab-list" role="tablist" aria-label="Route mode">
+            <button id="routeEditorTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="routeEditorPanel">Editor</button>
+            <button id="routeFollowingTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="routeFollowingPanel">Following</button>
           </div>
-          <div class="button-row route-action-row">
-            <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
-            <button id="fitRoute" type="button" class="secondary">Fit</button>
-            <button id="replotRoute" type="button" class="secondary">Replot</button>
-            <button id="clearPoints" type="button" class="secondary">Clear</button>
+
+          <div id="routeEditorPanel" class="route-mode-panel" role="tabpanel" aria-labelledby="routeEditorTab">
+            <div class="route-field-grid">
+              <label class="field-row route-name-field">
+                <span class="route-name-label">Route name <span class="route-name-note">change and save to copy</span></span>
+                <input id="routeName" type="text" autocomplete="off" />
+              </label>
+              <label class="field-row activity-field">
+                <span>Activity</span>
+                <select id="activityType">
+                  <option value="walk">Walk</option>
+                  <option value="bike">Bike</option>
+                  <option value="run">Run</option>
+                </select>
+              </label>
+            </div>
+            <label class="checkbox-row">
+              <input id="loopToggle" type="checkbox" />
+              Loop back to start
+            </label>
+            <div class="route-stats" aria-label="Route stats">
+              <span><span class="stat-label">Dist</span> <strong id="distanceText" data-testid="distance-text">0.00 mi</strong></span>
+              <span><span class="stat-label">Time</span> <strong id="estimatedTimeText" data-testid="estimated-time">0m</strong></span>
+              <span><span class="stat-label">Pace</span> <strong id="paceText" data-testid="pace-text">20:00 m/mi</strong></span>
+            </div>
+            <div class="button-row route-action-row" aria-label="Route actions">
+              <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
+              <button id="fitRoute" type="button" class="secondary">Fit</button>
+              <button id="replotRoute" type="button" class="secondary" data-testid="recalculate-route-button">Replot</button>
+              <button id="clearPoints" type="button" class="secondary">Clear</button>
+              <button id="undoRoute" type="button" class="secondary" data-testid="undo-route-button">Undo</button>
+              <button id="redoRoute" type="button" class="secondary" data-testid="redo-route-button">Redo</button>
+            </div>
+            <div class="point-mode-row" aria-label="Point tap mode">
+              <span class="point-mode-label">Point tap</span>
+              <div class="segmented-control">
+                <button id="pointAddMode" type="button" class="segmented-button is-active" data-point-mode="add" aria-pressed="true">Add</button>
+                <button id="pointDeleteMode" type="button" class="segmented-button" data-point-mode="delete" aria-pressed="false">Del</button>
+              </div>
+            </div>
+            <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
           </div>
-          <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
-          <div class="routing-settings" aria-label="Routing settings">
-            <label class="field-row compact-field">
-              <span>Routing</span>
-              <select id="routingProvider" data-testid="routing-provider">
-                <option value="auto">Auto</option>
-                <option value="openrouteservice">ORS/HEIGIT Worker</option>
-                <option value="osrm">OSRM fallback</option>
-              </select>
-            </label>
-            <label class="field-row compact-field routing-url-field">
-              <span>Worker URL</span>
-              <input id="orsBaseUrl" type="url" autocomplete="off" placeholder="https://example.workers.dev" data-testid="ors-base-url" />
-            </label>
-            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until a Worker URL is set.</p>
+
+          <div id="routeFollowingPanel" class="route-mode-panel following-panel" role="tabpanel" aria-labelledby="routeFollowingTab" hidden>
+            <p class="hint-text following-placeholder">Following controls will live here. Route editing stays in Editor.</p>
           </div>
         </section>
 
@@ -166,12 +169,10 @@ app.innerHTML = `
         </div>
 
         <section class="panel-section route-workspace">
-          <div class="section-title-row">
-            <h2>Routes</h2>
-          </div>
-          <div class="tab-list" role="tablist" aria-label="Route workspace">
-            <button id="currentRouteTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="currentRoutePanel">Current route</button>
+          <div class="tab-list workspace-tab-list" role="tablist" aria-label="Route workspace">
+            <button id="currentRouteTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="currentRoutePanel">Route</button>
             <button id="libraryTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="libraryPanel">Library</button>
+            <button id="settingsTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel">Settings</button>
           </div>
 
           <div id="currentRoutePanel" class="tab-panel" role="tabpanel" aria-labelledby="currentRouteTab">
@@ -228,9 +229,45 @@ app.innerHTML = `
             </div>
             <ol id="savedRouteList" class="saved-route-list" data-testid="saved-route-list"></ol>
           </div>
+
+          <div id="settingsPanel" class="tab-panel" role="tabpanel" aria-labelledby="settingsTab" hidden>
+            <h3 class="tab-subtitle">Settings</h3>
+            <div class="settings-group routing-settings" aria-label="Routing settings">
+              <h4>Routing</h4>
+            <label class="field-row compact-field">
+              <span>Routing</span>
+              <select id="routingProvider" data-testid="routing-provider">
+                <option value="auto">Auto</option>
+                <option value="openrouteservice">ORS/HEIGIT Worker</option>
+                <option value="osrm">OSRM fallback</option>
+              </select>
+            </label>
+            <label class="field-row compact-field routing-url-field">
+              <span>Worker URL</span>
+              <input id="orsBaseUrl" type="url" autocomplete="off" placeholder="https://example.workers.dev" data-testid="ors-base-url" />
+            </label>
+            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until a Worker URL is set.</p>
+            </div>
+            <div class="settings-group cloud-storage-panel" aria-label="Google Drive library backup">
+              <h4>Google Drive backup</h4>
+              <label class="field-row compact-field">
+                <span>Google Client ID</span>
+                <input id="googleClientId" type="text" autocomplete="off" placeholder="1234567890-example.apps.googleusercontent.com" data-testid="google-client-id" />
+              </label>
+              <div class="button-row cloud-action-row">
+                <button id="connectGoogleDrive" type="button" class="secondary">Connect Google Drive</button>
+                <button id="disconnectGoogleDrive" type="button" class="secondary">Disconnect</button>
+              </div>
+              <div class="button-row cloud-action-row">
+                <button id="saveLibraryToDrive" type="button" class="secondary">Save library to Google Drive</button>
+                <button id="loadLibraryFromDrive" type="button" class="secondary">Load library from Google Drive</button>
+              </div>
+              <p id="googleDriveStatus" class="hint-text" data-testid="google-drive-status">Google Drive is not connected.</p>
+            </div>
+          </div>
         </section>
 
-        <section class="panel-section backup-section">
+        <section id="backupSection" class="panel-section backup-section">
           <h2 id="backupHeading">Current route backup</h2>
           <div id="currentRouteBackupControls">
             <div class="button-row">
@@ -257,22 +294,6 @@ app.innerHTML = `
               <input id="importLibraryFile" class="sr-only" type="file" accept="application/json,.json" />
             </div>
             <p id="backupStatus" class="hint-text" data-testid="backup-status">Back up saved routes as app JSON.</p>
-            <div class="cloud-storage-panel" aria-label="Google Drive library backup">
-              <h3>Google Drive backup</h3>
-              <label class="field-row compact-field">
-                <span>Google Client ID</span>
-                <input id="googleClientId" type="text" autocomplete="off" placeholder="1234567890-example.apps.googleusercontent.com" data-testid="google-client-id" />
-              </label>
-              <div class="button-row cloud-action-row">
-                <button id="connectGoogleDrive" type="button" class="secondary">Connect Google Drive</button>
-                <button id="disconnectGoogleDrive" type="button" class="secondary">Disconnect</button>
-              </div>
-              <div class="button-row cloud-action-row">
-                <button id="saveLibraryToDrive" type="button" class="secondary">Save library to Google Drive</button>
-                <button id="loadLibraryFromDrive" type="button" class="secondary">Load library from Google Drive</button>
-              </div>
-              <p id="googleDriveStatus" class="hint-text" data-testid="google-drive-status">Google Drive is not connected.</p>
-            </div>
             <div id="importPreview" class="import-preview is-hidden" data-testid="import-preview" hidden>
               <p id="importPreviewText"></p>
               <div class="button-row">
@@ -316,6 +337,10 @@ const elements = {
   fitRoute: document.querySelector('#fitRoute'),
   replotRoute: document.querySelector('#replotRoute'),
   clearPoints: document.querySelector('#clearPoints'),
+  undoRoute: document.querySelector('#undoRoute'),
+  redoRoute: document.querySelector('#redoRoute'),
+  pointAddMode: document.querySelector('#pointAddMode'),
+  pointDeleteMode: document.querySelector('#pointDeleteMode'),
   saveRoute: document.querySelector('#saveRoute'),
   routingProvider: document.querySelector('#routingProvider'),
   orsBaseUrl: document.querySelector('#orsBaseUrl'),
@@ -356,10 +381,17 @@ const elements = {
   saveLibraryToDrive: document.querySelector('#saveLibraryToDrive'),
   loadLibraryFromDrive: document.querySelector('#loadLibraryFromDrive'),
   googleDriveStatus: document.querySelector('#googleDriveStatus'),
+  routeEditorTab: document.querySelector('#routeEditorTab'),
+  routeFollowingTab: document.querySelector('#routeFollowingTab'),
+  routeEditorPanel: document.querySelector('#routeEditorPanel'),
+  routeFollowingPanel: document.querySelector('#routeFollowingPanel'),
   currentRouteTab: document.querySelector('#currentRouteTab'),
   libraryTab: document.querySelector('#libraryTab'),
+  settingsTab: document.querySelector('#settingsTab'),
   currentRoutePanel: document.querySelector('#currentRoutePanel'),
   libraryPanel: document.querySelector('#libraryPanel'),
+  settingsPanel: document.querySelector('#settingsPanel'),
+  backupSection: document.querySelector('#backupSection'),
   librarySortButtons: document.querySelectorAll('[data-library-sort-key]'),
   libraryFilterButtons: document.querySelectorAll('[data-library-filter-key]'),
   libraryFilterPanel: document.querySelector('#libraryFilterPanel'),
@@ -394,6 +426,8 @@ function initMap() {
   pointLayer = L.layerGroup().addTo(map);
 
   map.on('click', (event) => {
+    if (pointTouchMode !== 'add') return;
+
     addRoutePoint(
       event.latlng.lat,
       event.latlng.lng,
@@ -407,8 +441,53 @@ function initMap() {
 }
 
 function addRoutePoint(lat, lng, name) {
+  pushUndoSnapshot();
   route = addPoint(route, { lat, lng, name });
-  markRouteDirty();
+  markRouteDirty({ geometryChanged: true });
+}
+
+function createRouteSnapshot() {
+  return {
+    route: createRoute(route),
+    activeSavedRouteId,
+    routeDirty,
+  };
+}
+
+function pushUndoSnapshot() {
+  undoStack.push(createRouteSnapshot());
+  if (undoStack.length > ROUTE_HISTORY_LIMIT) {
+    undoStack = undoStack.slice(-ROUTE_HISTORY_LIMIT);
+  }
+  redoStack = [];
+}
+
+function restoreRouteSnapshot(snapshot) {
+  route = createRoute(snapshot.route);
+  activeSavedRouteId = snapshot.activeSavedRouteId;
+  routeDirty = Boolean(snapshot.routeDirty);
+  routePlan = createEmptyRoutePlan();
+  routingRequestId += 1;
+  renderRoute();
+}
+
+function undoRouteEdit() {
+  const snapshot = undoStack.pop();
+  if (!snapshot) return;
+
+  redoStack.push(createRouteSnapshot());
+  restoreRouteSnapshot(snapshot);
+}
+
+function redoRouteEdit() {
+  const snapshot = redoStack.pop();
+  if (!snapshot) return;
+
+  undoStack.push(createRouteSnapshot());
+  if (undoStack.length > ROUTE_HISTORY_LIMIT) {
+    undoStack = undoStack.slice(-ROUTE_HISTORY_LIMIT);
+  }
+  restoreRouteSnapshot(snapshot);
 }
 
 function setRoute(
@@ -418,10 +497,15 @@ function setRoute(
   route = nextRoute;
   activeSavedRouteId = savedRouteId;
   routeDirty = dirty;
+  routePlan = createEmptyRoutePlan();
   renderRoute();
 }
 
-function markRouteDirty() {
+function markRouteDirty({ geometryChanged = false } = {}) {
+  if (geometryChanged) {
+    route = withStaleRoutedGeometry(route);
+    routePlan = createEmptyRoutePlan();
+  }
   routeDirty = true;
   renderRoute();
 }
@@ -444,7 +528,6 @@ function confirmClearRoute() {
 }
 
 function renderRoute() {
-  scheduleRoutePlanUpdate();
   renderRouteFields();
   renderPointList();
   renderLibraryList();
@@ -460,6 +543,12 @@ function renderRoute() {
   elements.saveRoute.textContent = routeDirty ? 'Save' : 'Saved';
   elements.saveRoute.disabled = !routeDirty;
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
+  elements.replotRoute.disabled =
+    route.points.length < 2 || routePlan.status === 'pending';
+  elements.replotRoute.classList.toggle('is-dirty', isRouteGeometryStale());
+  elements.undoRoute.disabled = undoStack.length === 0;
+  elements.redoRoute.disabled = redoStack.length === 0;
+  renderPointTouchMode();
   renderRoutingSettings();
   renderCloudSettings();
   renderBackupPanel();
@@ -511,8 +600,7 @@ function setGoogleDriveStatus(message) {
 
 function loadCloudSettings(storage = globalThis.localStorage) {
   return {
-    googleClientId:
-      storage?.getItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY) || '',
+    googleClientId: storage?.getItem(GOOGLE_DRIVE_CLIENT_ID_STORAGE_KEY) || '',
     googleDriveConnected: false,
   };
 }
@@ -701,7 +789,7 @@ function renderLibraryList() {
             </div>
             <div class="saved-route-cell" data-testid="saved-route-estimate">
               <span class="cell-label">Estimate</span>
-              <span>${formatLibraryDuration(estimatedDurationMinutes(savedRoute))}</span>
+              <span>${formatLibraryDuration(routeDurationMinutes(savedRoute))}</span>
             </div>
             <div class="saved-route-actions" aria-label="${escapeAttr(savedRoute.name)} actions">
               <button type="button" class="small-button secondary" data-load-saved-route="${escapeAttr(savedRoute.id)}">Load</button>
@@ -755,6 +843,14 @@ function renderMapRoute() {
   lineLayer.clearLayers();
   mileMarkerLayer.clearLayers();
 
+  const staleLinePoints = getStaleRouteCoordinates();
+  if (staleLinePoints.length > 1) {
+    L.polyline(staleLinePoints, {
+      className: 'route-line route-line-stale',
+      weight: 5,
+    }).addTo(lineLayer);
+  }
+
   const linePoints = getDisplayedRouteCoordinates();
 
   if (linePoints.length > 1) {
@@ -779,11 +875,20 @@ function renderMapRoute() {
 
     marker.on('dragend', (event) => {
       const latLng = event.target.getLatLng();
+      pushUndoSnapshot();
       route = updatePoint(route, point.id, {
         lat: latLng.lat,
         lng: latLng.lng,
       });
-      markRouteDirty();
+      markRouteDirty({ geometryChanged: true });
+    });
+
+    marker.on('click', () => {
+      if (pointTouchMode !== 'delete') return;
+
+      pushUndoSnapshot();
+      route = deletePoint(route, point.id);
+      markRouteDirty({ geometryChanged: true });
     });
 
     marker.bindTooltip(`${index + 1}. ${point.name}`);
@@ -809,6 +914,8 @@ function fitRouteToMap() {
 function saveCurrentRoute({ asCopy = false } = {}) {
   const now = new Date().toISOString();
   let savedRoute;
+  pushUndoSnapshot();
+  route = withCurrentRoutedGeometryState(route);
 
   if (asCopy || !activeSavedRouteId) {
     const routeToSave = asCopy
@@ -841,6 +948,8 @@ function loadSavedRoute(savedRouteId) {
   if (!savedRoute) return;
   if (!confirmDiscardUnsavedChanges('Loading a saved route')) return;
 
+  pushUndoSnapshot();
+  routePlan = createEmptyRoutePlan();
   setRoute(savedRouteToRoute(savedRoute), { savedRouteId, dirty: false });
   fitRouteToMap();
 }
@@ -865,6 +974,8 @@ function updateSavedRouteFromCurrent(savedRouteId) {
   if (!shouldUpdate) return;
 
   const now = new Date().toISOString();
+  pushUndoSnapshot();
+  route = withCurrentRoutedGeometryState(route);
   let savedRoute = createSavedRoute(route, { id: savedRouteId, now });
   savedRoute.createdAt = existing.createdAt;
   routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, {
@@ -879,28 +990,99 @@ function updateSavedRouteFromCurrent(savedRouteId) {
   renderRoute();
 }
 
-function setActiveRouteTab(tabName) {
-  activeRouteTab = tabName === 'library' ? 'library' : 'current';
 
+function normalizePointTouchMode(modeName) {
+  if (modeName === 'delete') return 'delete';
+  return 'add';
+}
+
+function setPointTouchMode(modeName) {
+  pointTouchMode = normalizePointTouchMode(modeName);
+  renderPointTouchMode();
+  persistAppState();
+}
+
+function renderPointTouchMode() {
+  const isDelete = pointTouchMode === 'delete';
+  elements.pointAddMode.classList.toggle('is-active', !isDelete);
+  elements.pointDeleteMode.classList.toggle('is-active', isDelete);
+  elements.pointAddMode.setAttribute('aria-pressed', !isDelete ? 'true' : 'false');
+  elements.pointDeleteMode.setAttribute('aria-pressed', isDelete ? 'true' : 'false');
+}
+
+function normalizeRouteModeTab(tabName) {
+  if (tabName === 'following') return 'following';
+  return 'editor';
+}
+
+function setActiveRouteModeTab(tabName) {
+  activeRouteModeTab = normalizeRouteModeTab(tabName);
+
+  const showEditor = activeRouteModeTab === 'editor';
+  const showFollowing = activeRouteModeTab === 'following';
+
+  elements.routeEditorPanel.hidden = !showEditor;
+  elements.routeFollowingPanel.hidden = !showFollowing;
+
+  elements.routeEditorTab.classList.toggle('is-active', showEditor);
+  elements.routeFollowingTab.classList.toggle('is-active', showFollowing);
+
+  elements.routeEditorTab.setAttribute(
+    'aria-selected',
+    showEditor ? 'true' : 'false',
+  );
+  elements.routeFollowingTab.setAttribute(
+    'aria-selected',
+    showFollowing ? 'true' : 'false',
+  );
+
+  persistAppState();
+}
+
+function normalizeRouteTab(tabName) {
+  if (tabName === 'library') return 'library';
+  if (tabName === 'settings') return 'settings';
+  return 'route';
+}
+
+function setActiveRouteTab(tabName) {
+  activeRouteTab = normalizeRouteTab(tabName);
+
+  const showRoute = activeRouteTab === 'route';
   const showLibrary = activeRouteTab === 'library';
-  elements.currentRoutePanel.hidden = showLibrary;
+  const showSettings = activeRouteTab === 'settings';
+
+  elements.currentRoutePanel.hidden = !showRoute;
   elements.libraryPanel.hidden = !showLibrary;
-  elements.currentRouteTab.classList.toggle('is-active', !showLibrary);
+  elements.settingsPanel.hidden = !showSettings;
+
+  elements.currentRouteTab.classList.toggle('is-active', showRoute);
   elements.libraryTab.classList.toggle('is-active', showLibrary);
+  elements.settingsTab.classList.toggle('is-active', showSettings);
+
   elements.currentRouteTab.setAttribute(
     'aria-selected',
-    showLibrary ? 'false' : 'true',
+    showRoute ? 'true' : 'false',
   );
   elements.libraryTab.setAttribute(
     'aria-selected',
     showLibrary ? 'true' : 'false',
   );
+  elements.settingsTab.setAttribute(
+    'aria-selected',
+    showSettings ? 'true' : 'false',
+  );
+
   renderBackupPanel();
   persistAppState();
 }
 
 function renderBackupPanel() {
+  const showSettings = activeRouteTab === 'settings';
   const showLibraryBackup = activeRouteTab === 'library';
+
+  elements.backupSection.hidden = showSettings;
+  if (showSettings) return;
 
   elements.backupHeading.textContent = showLibraryBackup
     ? 'Library backup'
@@ -931,7 +1113,7 @@ function clearLibraryColumnFilter() {
 }
 
 function exportCurrentRouteJson() {
-  const json = serializeRouteFile(route, {
+  const json = serializeRouteFile(withCurrentRoutedGeometryState(route), {
     appVersion: APP_VERSION,
   });
   const blob = new Blob([json], { type: 'application/json' });
@@ -973,6 +1155,7 @@ function confirmCurrentRouteImport() {
   if (!confirmDiscardUnsavedChanges('Importing this route')) return;
 
   const importedRoute = pendingRouteImport.route;
+  pushUndoSnapshot();
   pendingRouteImport = null;
   setRoute(importedRoute, { savedRouteId: null, dirty: true });
   renderRouteImportPreview();
@@ -1005,7 +1188,7 @@ function renderRouteImportPreview() {
 }
 
 function exportCurrentRouteGpx() {
-  const gpx = serializeRouteGpx(route, {
+  const gpx = serializeRouteGpx(withCurrentRoutedGeometryState(route), {
     appVersion: APP_VERSION,
   });
   const blob = new Blob([gpx], { type: 'application/gpx+xml' });
@@ -1239,8 +1422,9 @@ function loadAppState(storage = globalThis.localStorage) {
           ? parsedState.activeSavedRouteId
           : null,
       routeDirty: Boolean(parsedState.routeDirty),
-      activeRouteTab:
-        parsedState.activeRouteTab === 'library' ? 'library' : 'current',
+      activeRouteTab: normalizeRouteTab(parsedState.activeRouteTab),
+      activeRouteModeTab: normalizeRouteModeTab(parsedState.activeRouteModeTab),
+      pointTouchMode: normalizePointTouchMode(parsedState.pointTouchMode),
       mapView:
         center &&
         Number.isFinite(center[0]) &&
@@ -1270,6 +1454,8 @@ function persistAppState(storage = globalThis.localStorage) {
     activeSavedRouteId,
     routeDirty,
     activeRouteTab,
+    activeRouteModeTab,
+    pointTouchMode,
     mapView,
   };
 
@@ -1308,44 +1494,34 @@ function saveRoutingSettings(storage = globalThis.localStorage) {
   storage?.removeItem('walkBikeRun.orsApiKey');
 }
 
-function scheduleRoutePlanUpdate() {
-  const nextRouteKey = getRoutePlanKey();
+async function recalculateRoute() {
+  if (route.points.length < 2 || routePlan.status === 'pending') return;
 
-  if (routePlan.routeKey === nextRouteKey || route.points.length < 2) {
-    if (route.points.length < 2 && routePlan.status !== 'idle') {
-      routePlan = createEmptyRoutePlan();
-    }
-    return;
-  }
-
-  routePlan = {
-    ...routePlan,
-    routeKey: nextRouteKey,
-    status: 'pending',
-    provider: resolveRoutingProvider(routingSettings),
-    segments: getRouteLegs(route).map((leg) =>
-      createDisplayFallbackSegment(leg),
-    ),
-  };
-
-  window.clearTimeout(routingTimer);
-  const requestId = (routingRequestId += 1);
-  routingTimer = window.setTimeout(() => updateRoutePlan(requestId), 350);
-}
-
-async function updateRoutePlan(requestId) {
   const routeSnapshot = route;
   const routeKey = getRoutePlanKey(routeSnapshot);
+  const requestId = (routingRequestId += 1);
+
+  routePlan = {
+    routeKey,
+    provider: resolveRoutingProvider(routingSettings),
+    status: 'pending',
+    segments: [],
+  };
+  renderRoute();
 
   try {
     const plan = await routeSegments(routeSnapshot, routingSettings);
     if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
       return;
 
+    const routedGeometry = createRoutedGeometry(plan, routeKey);
+    pushUndoSnapshot();
+    route = updateRoute(route, { routedGeometry });
     routePlan = {
       ...plan,
       routeKey,
     };
+    persistFreshGeometryForCleanSavedRoute(routedGeometry.updatedAt);
     renderRoute();
   } catch {
     if (requestId !== routingRequestId || routeKey !== getRoutePlanKey())
@@ -1354,20 +1530,48 @@ async function updateRoutePlan(requestId) {
       routeKey,
       provider: resolveRoutingProvider(routingSettings),
       status: 'failed',
-      segments: getRouteLegs(route).map((leg) =>
-        createDisplayFallbackSegment(leg),
-      ),
+      segments: [],
     };
     renderRoute();
   }
 }
 
-function forceReplotRoute() {
-  window.clearTimeout(routingTimer);
-  routePlan = createEmptyRoutePlan();
-  const requestId = (routingRequestId += 1);
-  updateRoutePlan(requestId);
-  renderRoute();
+function createRoutedGeometry(plan, routeKey) {
+  return {
+    schemaVersion: 1,
+    routeKey,
+    provider: plan.provider,
+    status: plan.status,
+    isStale: false,
+    distanceMeters: plan.segments.reduce(
+      (total, segment) => total + segment.distance,
+      0,
+    ),
+    durationSeconds: plan.segments.reduce(
+      (total, segment) => total + segment.duration,
+      0,
+    ),
+    segments: plan.segments,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function persistFreshGeometryForCleanSavedRoute(now) {
+  if (!activeSavedRouteId || routeDirty) return;
+
+  const existing = getSavedRoute(routeLibrary, activeSavedRouteId);
+  if (!existing) return;
+
+  const savedRoute = createSavedRoute(route, {
+    id: activeSavedRouteId,
+    now,
+  });
+  savedRoute.createdAt = existing.createdAt;
+  routeLibrary = upsertSavedRoute(routeLibrary, savedRoute, {
+    id: savedRoute.id,
+    now,
+  });
+  persistLibrary();
 }
 
 function getRoutePlanKey(routeValue = route) {
@@ -1383,6 +1587,54 @@ function getRoutePlanKey(routeValue = route) {
   const osrmState = routingSettings.osrmBaseUrl || 'default-osrm';
 
   return `${routeValue.activityType}:${routeValue.loop}:${provider}:${workerState}:${osrmState}:${pointKey}`;
+}
+
+function getRoutedGeometryState(routeValue = route) {
+  const routedGeometry = routeValue.routedGeometry;
+  if (!routedGeometry) return null;
+
+  const isStale =
+    routedGeometry.isStale ||
+    routeValue.points.length < 2 ||
+    routedGeometry.segments.length !== getRouteLegs(routeValue).length ||
+    routedGeometry.routeKey !== getRoutePlanKey(routeValue);
+
+  return {
+    routedGeometry,
+    isStale,
+  };
+}
+
+function getFreshRoutedGeometry(routeValue = route) {
+  const state = getRoutedGeometryState(routeValue);
+  return state && !state.isStale ? state.routedGeometry : null;
+}
+
+function getStaleRoutedGeometry(routeValue = route) {
+  const state = getRoutedGeometryState(routeValue);
+  return state?.isStale ? state.routedGeometry : null;
+}
+
+function isRouteGeometryStale(routeValue = route) {
+  return Boolean(getStaleRoutedGeometry(routeValue));
+}
+
+function withStaleRoutedGeometry(routeValue) {
+  if (!routeValue.routedGeometry) return routeValue;
+  return updateRoute(routeValue, {
+    routedGeometry: {
+      ...routeValue.routedGeometry,
+      isStale: true,
+    },
+  });
+}
+
+function withCurrentRoutedGeometryState(routeValue) {
+  if (!routeValue.routedGeometry) return routeValue;
+  const state = getRoutedGeometryState(routeValue);
+  if (!state?.isStale || routeValue.routedGeometry.isStale) return routeValue;
+
+  return withStaleRoutedGeometry(routeValue);
 }
 
 function createDisplayFallbackSegment(leg) {
@@ -1401,15 +1653,24 @@ function createDisplayFallbackSegment(leg) {
 }
 
 function getDisplayedRouteSegments() {
-  if (routePlan.routeKey === getRoutePlanKey() && routePlan.segments.length) {
-    return routePlan.segments;
+  const routedGeometry = getFreshRoutedGeometry();
+  if (routedGeometry) {
+    return routedGeometry.segments;
   }
 
   return getRouteLegs(route).map((leg) => createDisplayFallbackSegment(leg));
 }
 
 function getDisplayedRouteCoordinates() {
-  const segments = getDisplayedRouteSegments();
+  return getSegmentCoordinates(getDisplayedRouteSegments());
+}
+
+function getStaleRouteCoordinates() {
+  const routedGeometry = getStaleRoutedGeometry();
+  return routedGeometry ? getSegmentCoordinates(routedGeometry.segments) : [];
+}
+
+function getSegmentCoordinates(segments) {
   const coordinates = [];
 
   segments.forEach((segment) => {
@@ -1559,13 +1820,21 @@ function getRoutingStatusText() {
       : 'OSRM';
 
   if (route.points.length < 2) return `${providerLabel} routing ready.`;
-  if (routePlan.status === 'pending') return `Routing with ${providerLabel}...`;
+  if (routePlan.status === 'pending')
+    return `Recalculating with ${providerLabel}...`;
+  if (isRouteGeometryStale()) {
+    return `Route changed; showing stale routed geometry until you replot.`;
+  }
   if (routePlan.status === 'partial-fallback') {
     return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
   }
   if (routePlan.status === 'failed')
-    return `Routing failed; showing straight-line fallback.`;
-  if (routePlan.status === 'routed') return `Routed with ${providerLabel}.`;
+    return `Routing failed; showing current straight-line route.`;
+  const routedGeometry = getFreshRoutedGeometry();
+  if (routedGeometry?.status === 'partial-fallback') {
+    return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
+  }
+  if (routedGeometry) return `Routed with ${providerLabel}.`;
   return `${providerLabel} routing ready.`;
 }
 
@@ -1670,13 +1939,15 @@ function escapeAttr(value) {
 }
 
 elements.routeName.addEventListener('change', (event) => {
+  pushUndoSnapshot();
   route = updateRoute(route, { name: event.target.value });
   markRouteDirty();
 });
 
 elements.activityType.addEventListener('change', (event) => {
+  pushUndoSnapshot();
   route = updateRoute(route, { activityType: event.target.value });
-  markRouteDirty();
+  markRouteDirty({ geometryChanged: true });
 });
 
 elements.routingProvider.addEventListener('change', (event) => {
@@ -1700,10 +1971,15 @@ elements.orsBaseUrl.addEventListener('change', (event) => {
 });
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
-elements.replotRoute.addEventListener('click', forceReplotRoute);
+elements.replotRoute.addEventListener('click', recalculateRoute);
+elements.undoRoute.addEventListener('click', undoRouteEdit);
+elements.redoRoute.addEventListener('click', redoRouteEdit);
+elements.pointAddMode.addEventListener('click', () => setPointTouchMode('add'));
+elements.pointDeleteMode.addEventListener('click', () => setPointTouchMode('delete'));
 
 elements.clearPoints.addEventListener('click', () => {
   if (!confirmClearRoute()) return;
+  pushUndoSnapshot();
   setRoute(
     createRoute({ name: 'New route', activityType: route.activityType }),
     {
@@ -1714,16 +1990,26 @@ elements.clearPoints.addEventListener('click', () => {
 });
 
 elements.loopToggle.addEventListener('change', (event) => {
+  pushUndoSnapshot();
   route = setLoop(route, event.target.checked);
-  markRouteDirty();
+  markRouteDirty({ geometryChanged: true });
 });
 
 elements.saveRoute.addEventListener('click', () => saveCurrentRoute());
+elements.routeEditorTab.addEventListener('click', () =>
+  setActiveRouteModeTab('editor'),
+);
+elements.routeFollowingTab.addEventListener('click', () =>
+  setActiveRouteModeTab('following'),
+);
 elements.currentRouteTab.addEventListener('click', () =>
-  setActiveRouteTab('current'),
+  setActiveRouteTab('route'),
 );
 elements.libraryTab.addEventListener('click', () =>
   setActiveRouteTab('library'),
+);
+elements.settingsTab.addEventListener('click', () =>
+  setActiveRouteTab('settings'),
 );
 elements.librarySortButtons.forEach((button) => {
   button.addEventListener('click', () =>
@@ -1804,24 +2090,29 @@ elements.googleClientId.addEventListener('change', (event) => {
 elements.connectGoogleDrive.addEventListener('click', connectGoogleDrive);
 elements.disconnectGoogleDrive.addEventListener('click', disconnectGoogleDrive);
 elements.saveLibraryToDrive.addEventListener('click', saveLibraryToGoogleDrive);
-elements.loadLibraryFromDrive.addEventListener('click', loadLibraryFromGoogleDrive);
+elements.loadLibraryFromDrive.addEventListener(
+  'click',
+  loadLibraryFromGoogleDrive,
+);
 
 elements.pointList.addEventListener('click', (event) => {
   const deleteButton = event.target.closest('[data-delete-point]');
   if (deleteButton) {
+    pushUndoSnapshot();
     route = deletePoint(route, deleteButton.dataset.deletePoint);
-    markRouteDirty();
+    markRouteDirty({ geometryChanged: true });
     return;
   }
 
   const moveButton = event.target.closest('[data-move-point]');
   if (moveButton) {
+    pushUndoSnapshot();
     route = movePoint(
       route,
       moveButton.dataset.movePoint,
       Number(moveButton.dataset.moveDelta),
     );
-    markRouteDirty();
+    markRouteDirty({ geometryChanged: true });
   }
 });
 
@@ -1829,6 +2120,7 @@ elements.pointList.addEventListener('change', (event) => {
   const input = event.target.closest('[data-rename-point]');
   if (!input) return;
 
+  pushUndoSnapshot();
   route = renamePoint(route, input.dataset.renamePoint, input.value);
   markRouteDirty();
 });

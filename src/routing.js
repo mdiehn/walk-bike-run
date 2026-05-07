@@ -35,7 +35,7 @@ export function getRouteLegs(route) {
     });
   }
 
-  if (route.loop && points.length > 2) {
+  if (route.loop && points.length >= 2) {
     legs.push({
       fromIndex: points.length - 1,
       toIndex: 0,
@@ -55,7 +55,9 @@ export async function routeSegments(route, settings = {}, fetchImpl = fetch) {
   const segments = [];
 
   for (const leg of legs) {
-    segments.push(await routeLeg(leg, route.activityType, provider, settings, fetchImpl));
+    segments.push(
+      await routeLeg(leg, route.activityType, provider, settings, fetchImpl),
+    );
   }
 
   return {
@@ -109,7 +111,9 @@ async function routeOsrmLeg(leg, activityType, settings, fetchImpl) {
   const profile = activityType === 'bike' ? 'bike' : 'foot';
   const from = `${leg.from.lng},${leg.from.lat}`;
   const to = `${leg.to.lng},${leg.to.lat}`;
-  const baseUrl = trimTrailingSlash(settings.osrmBaseUrl || DEFAULT_OSRM_BASE_URL);
+  const baseUrl = trimTrailingSlash(
+    settings.osrmBaseUrl || DEFAULT_OSRM_BASE_URL,
+  );
   const url = `${baseUrl}/route/v1/${profile}/${from};${to}?overview=full&geometries=geojson`;
   const response = await fetchImpl(url);
 
@@ -131,7 +135,12 @@ async function routeOsrmLeg(leg, activityType, settings, fetchImpl) {
   };
 }
 
-async function routeOpenRouteServiceLeg(leg, activityType, settings, fetchImpl) {
+async function routeOpenRouteServiceLeg(
+  leg,
+  activityType,
+  settings,
+  fetchImpl,
+) {
   const baseUrl = trimTrailingSlash(settings.orsBaseUrl);
   if (!baseUrl) {
     throw new Error('ORS/HEIGIT Worker base URL is required.');
@@ -174,5 +183,7 @@ async function routeOpenRouteServiceLeg(leg, activityType, settings, fetchImpl) 
 }
 
 function trimTrailingSlash(value) {
-  return String(value ?? '').trim().replace(/\/+$/u, '');
+  return String(value ?? '')
+    .trim()
+    .replace(/\/+$/u, '');
 }

@@ -1,7 +1,11 @@
-import { createRoute, totalDistanceMeters } from "./route-model.js";
+import {
+  createRoute,
+  routeDistanceMeters,
+  routeDurationMinutes,
+} from './route-model.js';
 
 export const ROUTE_LIBRARY_SCHEMA_VERSION = 1;
-export const ROUTE_LIBRARY_STORAGE_KEY = "walk-bike-run.routeLibrary.v1";
+export const ROUTE_LIBRARY_STORAGE_KEY = 'walk-bike-run.routeLibrary.v1';
 
 export function loadRouteLibrary(storage = globalThis.localStorage) {
   if (!storage) return [];
@@ -39,7 +43,9 @@ export function createSavedRoute(
     activityType: cleanRoute.activityType,
     loop: cleanRoute.loop,
     points: cleanRoute.points,
-    distanceMeters: totalDistanceMeters(cleanRoute),
+    distanceMeters: routeDistanceMeters(cleanRoute),
+    durationSeconds: routeDurationMinutes(cleanRoute) * 60,
+    routedGeometry: cleanRoute.routedGeometry,
     createdAt: now,
     updatedAt: now,
   };
@@ -54,6 +60,7 @@ export function savedRouteToRoute(savedRoute) {
     activityType: normalized.activityType,
     loop: normalized.loop,
     points: normalized.points,
+    routedGeometry: normalized.routedGeometry,
   });
 }
 
@@ -119,7 +126,7 @@ export function getSavedRoute(library, savedRouteId) {
 }
 
 export function normalizeSavedRoute(savedRoute) {
-  if (!savedRoute || typeof savedRoute !== "object") return null;
+  if (!savedRoute || typeof savedRoute !== 'object') return null;
 
   try {
     const route = createRoute(savedRoute);
@@ -135,7 +142,9 @@ export function normalizeSavedRoute(savedRoute) {
       activityType: route.activityType,
       loop: route.loop,
       points: route.points,
-      distanceMeters: totalDistanceMeters(route),
+      distanceMeters: routeDistanceMeters(route),
+      durationSeconds: routeDurationMinutes(route) * 60,
+      routedGeometry: route.routedGeometry,
       createdAt,
       updatedAt,
     };
