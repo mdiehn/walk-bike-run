@@ -12,19 +12,55 @@ test('loads the route editor shell', async ({ page }) => {
   await expect(page.getByTestId('distance-text')).toHaveText('0.00 mi');
   await expect(page.getByTestId('estimated-time')).toHaveText('0m');
   await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
-  await expect(page.getByRole('tab', { name: 'Editor' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Following' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Plan' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Go' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Following' }).click();
-  await expect(
-    page.getByText('Following controls will live here.'),
-  ).toBeVisible();
-  await page.getByRole('tab', { name: 'Editor' }).click();
+  await page.getByRole('button', { name: 'Go' }).click();
+  await expect(page.getByTestId('go-status-text')).toHaveText(
+    'Plan a route first',
+  );
+  await page.getByRole('button', { name: 'Plan' }).click();
   await expect(page.getByTestId('undo-route-button')).toBeDisabled();
   await expect(page.getByTestId('redo-route-button')).toBeDisabled();
   await expect(
     page.getByRole('heading', { name: 'Current route backup' }),
   ).toBeVisible();
+});
+
+test('shows first-pass Go mode controls and route-use stats', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await addPointAtMap(page);
+  await addPointAtMap(page);
+  await page.getByRole('button', { name: 'Go' }).click();
+
+  await expect(page.getByTestId('go-route-name')).toHaveText('New route');
+  await expect(page.getByTestId('go-distance-text')).not.toHaveText('0.00 mi');
+  await expect(page.getByTestId('go-elapsed-text')).toHaveText('0:00');
+  await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
+  await expect(page.getByTestId('go-start-button')).toBeEnabled();
+  await expect(page.getByTestId('go-pause-button')).toBeDisabled();
+  await expect(page.getByTestId('go-stop-button')).toBeDisabled();
+  await expect(page.getByTestId('go-recenter-button')).toBeEnabled();
+
+  await page.getByTestId('go-start-button').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText(
+    'Moving placeholder',
+  );
+  await expect(page.getByTestId('go-start-button')).toBeDisabled();
+  await expect(page.getByTestId('go-pause-button')).toBeEnabled();
+  await expect(page.getByTestId('go-stop-button')).toBeEnabled();
+
+  await page.getByTestId('go-pause-button').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Paused');
+  await expect(page.getByTestId('go-start-button')).toHaveText('Resume');
+
+  await page.getByTestId('go-stop-button').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Ready to go');
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.getByTestId('undo-route-button')).toBeEnabled();
 });
 
 test('updates route stats when activity changes', async ({ page }) => {

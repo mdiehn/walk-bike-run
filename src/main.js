@@ -61,6 +61,7 @@ let activeRouteTab = normalizeRouteTab(persistedAppState.activeRouteTab);
 let activeRouteModeTab = normalizeRouteModeTab(
   persistedAppState.activeRouteModeTab,
 );
+let goSessionStatus = 'ready';
 let pointTouchMode = normalizePointTouchMode(persistedAppState.pointTouchMode);
 let librarySortBy = 'saved';
 let librarySortDirection = DEFAULT_LIBRARY_SORT_DIRECTIONS.saved;
@@ -109,12 +110,12 @@ app.innerHTML = `
 
       <aside class="panel" aria-label="Route controls">
         <section class="panel-section route-summary-section">
-          <div class="tab-list route-mode-tab-list" role="tablist" aria-label="Route mode">
-            <button id="routeEditorTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="routeEditorPanel">Editor</button>
-            <button id="routeFollowingTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="routeFollowingPanel">Following</button>
+          <div class="mode-switch" aria-label="App mode">
+            <button id="planModeTab" class="mode-switch-button is-active" type="button" aria-pressed="true">Plan</button>
+            <button id="goModeTab" class="mode-switch-button" type="button" aria-pressed="false">Go</button>
           </div>
 
-          <div id="routeEditorPanel" class="route-mode-panel" role="tabpanel" aria-labelledby="routeEditorTab">
+          <div id="planModePanel" class="route-mode-panel" aria-label="Plan mode">
             <div class="route-field-grid">
               <label class="field-row route-name-field">
                 <span class="route-name-label">Route name <span class="route-name-note">change and save to copy</span></span>
@@ -156,8 +157,48 @@ app.innerHTML = `
             <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
           </div>
 
-          <div id="routeFollowingPanel" class="route-mode-panel following-panel" role="tabpanel" aria-labelledby="routeFollowingTab" hidden>
-            <p class="hint-text following-placeholder">Following controls will live here. Route editing stays in Editor.</p>
+          <div id="goModePanel" class="route-mode-panel go-mode-panel" aria-label="Go mode" hidden>
+            <div class="go-mode-header">
+              <div>
+                <p class="eyebrow go-mode-eyebrow">Go mode</p>
+                <h2 id="goRouteName" data-testid="go-route-name">New route</h2>
+              </div>
+              <button id="exitGoMode" type="button" class="secondary">Plan</button>
+            </div>
+            <div class="go-stat-grid" aria-label="Go mode route stats">
+              <div class="go-stat-card">
+                <span class="go-stat-label">Distance</span>
+                <strong id="goDistanceText" data-testid="go-distance-text">0.00 mi</strong>
+              </div>
+              <div class="go-stat-card">
+                <span class="go-stat-label">Elapsed</span>
+                <strong id="goElapsedText" data-testid="go-elapsed-text">0:00</strong>
+              </div>
+              <div class="go-stat-card">
+                <span class="go-stat-label">Pace / speed</span>
+                <strong id="goPaceText" data-testid="go-pace-text">20:00 m/mi</strong>
+              </div>
+              <div class="go-stat-card">
+                <span class="go-stat-label">Remaining</span>
+                <strong id="goRemainingText" data-testid="go-remaining-text">0.00 mi</strong>
+              </div>
+            </div>
+            <div class="go-progress" aria-label="Route progress">
+              <div class="go-progress-text">
+                <span id="goStatusText" data-testid="go-status-text">Ready to go</span>
+                <strong id="goProgressText" data-testid="go-progress-text">0%</strong>
+              </div>
+              <div class="go-progress-track" aria-hidden="true">
+                <span id="goProgressBar" class="go-progress-bar"></span>
+              </div>
+            </div>
+            <div class="go-control-grid" aria-label="Go controls">
+              <button id="goStart" type="button" class="go-primary-control" data-testid="go-start-button">Start</button>
+              <button id="goPause" type="button" class="secondary go-control" data-testid="go-pause-button">Pause</button>
+              <button id="goStop" type="button" class="danger go-control" data-testid="go-stop-button">Stop</button>
+              <button id="goRecenter" type="button" class="secondary go-control" data-testid="go-recenter-button">Recenter</button>
+            </div>
+            <p class="hint-text go-mode-note">Live tracking comes later. This first pass uses the current planned route for readable route-use stats.</p>
           </div>
         </section>
 
@@ -381,10 +422,23 @@ const elements = {
   saveLibraryToDrive: document.querySelector('#saveLibraryToDrive'),
   loadLibraryFromDrive: document.querySelector('#loadLibraryFromDrive'),
   googleDriveStatus: document.querySelector('#googleDriveStatus'),
-  routeEditorTab: document.querySelector('#routeEditorTab'),
-  routeFollowingTab: document.querySelector('#routeFollowingTab'),
-  routeEditorPanel: document.querySelector('#routeEditorPanel'),
-  routeFollowingPanel: document.querySelector('#routeFollowingPanel'),
+  planModeTab: document.querySelector('#planModeTab'),
+  goModeTab: document.querySelector('#goModeTab'),
+  planModePanel: document.querySelector('#planModePanel'),
+  goModePanel: document.querySelector('#goModePanel'),
+  exitGoMode: document.querySelector('#exitGoMode'),
+  goRouteName: document.querySelector('#goRouteName'),
+  goDistanceText: document.querySelector('#goDistanceText'),
+  goElapsedText: document.querySelector('#goElapsedText'),
+  goPaceText: document.querySelector('#goPaceText'),
+  goRemainingText: document.querySelector('#goRemainingText'),
+  goStatusText: document.querySelector('#goStatusText'),
+  goProgressText: document.querySelector('#goProgressText'),
+  goProgressBar: document.querySelector('#goProgressBar'),
+  goStart: document.querySelector('#goStart'),
+  goPause: document.querySelector('#goPause'),
+  goStop: document.querySelector('#goStop'),
+  goRecenter: document.querySelector('#goRecenter'),
   currentRouteTab: document.querySelector('#currentRouteTab'),
   libraryTab: document.querySelector('#libraryTab'),
   settingsTab: document.querySelector('#settingsTab'),
@@ -549,6 +603,7 @@ function renderRoute() {
   elements.undoRoute.disabled = undoStack.length === 0;
   elements.redoRoute.disabled = redoStack.length === 0;
   renderPointTouchMode();
+  renderGoMode();
   renderRoutingSettings();
   renderCloudSettings();
   renderBackupPanel();
@@ -990,7 +1045,6 @@ function updateSavedRouteFromCurrent(savedRouteId) {
   renderRoute();
 }
 
-
 function normalizePointTouchMode(modeName) {
   if (modeName === 'delete') return 'delete';
   return 'add';
@@ -1006,37 +1060,92 @@ function renderPointTouchMode() {
   const isDelete = pointTouchMode === 'delete';
   elements.pointAddMode.classList.toggle('is-active', !isDelete);
   elements.pointDeleteMode.classList.toggle('is-active', isDelete);
-  elements.pointAddMode.setAttribute('aria-pressed', !isDelete ? 'true' : 'false');
-  elements.pointDeleteMode.setAttribute('aria-pressed', isDelete ? 'true' : 'false');
+  elements.pointAddMode.setAttribute(
+    'aria-pressed',
+    !isDelete ? 'true' : 'false',
+  );
+  elements.pointDeleteMode.setAttribute(
+    'aria-pressed',
+    isDelete ? 'true' : 'false',
+  );
 }
 
 function normalizeRouteModeTab(tabName) {
-  if (tabName === 'following') return 'following';
-  return 'editor';
+  if (tabName === 'go' || tabName === 'following') return 'go';
+  return 'plan';
 }
 
 function setActiveRouteModeTab(tabName) {
   activeRouteModeTab = normalizeRouteModeTab(tabName);
 
-  const showEditor = activeRouteModeTab === 'editor';
-  const showFollowing = activeRouteModeTab === 'following';
+  const showPlan = activeRouteModeTab === 'plan';
+  const showGo = activeRouteModeTab === 'go';
 
-  elements.routeEditorPanel.hidden = !showEditor;
-  elements.routeFollowingPanel.hidden = !showFollowing;
+  elements.planModePanel.hidden = !showPlan;
+  elements.goModePanel.hidden = !showGo;
 
-  elements.routeEditorTab.classList.toggle('is-active', showEditor);
-  elements.routeFollowingTab.classList.toggle('is-active', showFollowing);
+  elements.planModeTab.classList.toggle('is-active', showPlan);
+  elements.goModeTab.classList.toggle('is-active', showGo);
 
-  elements.routeEditorTab.setAttribute(
-    'aria-selected',
-    showEditor ? 'true' : 'false',
+  elements.planModeTab.setAttribute(
+    'aria-pressed',
+    showPlan ? 'true' : 'false',
   );
-  elements.routeFollowingTab.setAttribute(
-    'aria-selected',
-    showFollowing ? 'true' : 'false',
-  );
+  elements.goModeTab.setAttribute('aria-pressed', showGo ? 'true' : 'false');
 
+  renderGoMode();
   persistAppState();
+}
+
+function renderGoMode() {
+  const routeDistanceMeters = getDisplayedRouteDistanceMeters();
+
+  elements.goRouteName.textContent = route.name || 'New route';
+  elements.goDistanceText.textContent = formatMiles(routeDistanceMeters);
+  elements.goElapsedText.textContent = '0:00';
+  elements.goPaceText.textContent = formatDisplayedPace(routeDistanceMeters);
+  elements.goRemainingText.textContent = formatMiles(routeDistanceMeters);
+  elements.goProgressText.textContent = '0%';
+  elements.goProgressBar.style.width = '0%';
+  elements.goStatusText.textContent = getGoStatusText();
+
+  const isRunning = goSessionStatus === 'running';
+  const isPaused = goSessionStatus === 'paused';
+  const hasRoute = route.points.length > 0;
+
+  elements.goStart.textContent = isPaused ? 'Resume' : 'Start';
+  elements.goStart.disabled = !hasRoute || isRunning;
+  elements.goPause.disabled = !isRunning;
+  elements.goStop.disabled = goSessionStatus === 'ready';
+  elements.goRecenter.disabled = route.points.length === 0;
+}
+
+function getGoStatusText() {
+  if (route.points.length === 0) return 'Plan a route first';
+  if (goSessionStatus === 'running') return 'Moving placeholder';
+  if (goSessionStatus === 'paused') return 'Paused';
+  return 'Ready to go';
+}
+
+function startGoSession() {
+  if (route.points.length === 0) return;
+  goSessionStatus = 'running';
+  setActiveRouteModeTab('go');
+}
+
+function pauseGoSession() {
+  if (goSessionStatus !== 'running') return;
+  goSessionStatus = 'paused';
+  renderGoMode();
+}
+
+function stopGoSession() {
+  goSessionStatus = 'ready';
+  renderGoMode();
+}
+
+function recenterGoRoute() {
+  fitRouteToMap();
 }
 
 function normalizeRouteTab(tabName) {
@@ -1975,7 +2084,9 @@ elements.replotRoute.addEventListener('click', recalculateRoute);
 elements.undoRoute.addEventListener('click', undoRouteEdit);
 elements.redoRoute.addEventListener('click', redoRouteEdit);
 elements.pointAddMode.addEventListener('click', () => setPointTouchMode('add'));
-elements.pointDeleteMode.addEventListener('click', () => setPointTouchMode('delete'));
+elements.pointDeleteMode.addEventListener('click', () =>
+  setPointTouchMode('delete'),
+);
 
 elements.clearPoints.addEventListener('click', () => {
   if (!confirmClearRoute()) return;
@@ -1996,12 +2107,17 @@ elements.loopToggle.addEventListener('change', (event) => {
 });
 
 elements.saveRoute.addEventListener('click', () => saveCurrentRoute());
-elements.routeEditorTab.addEventListener('click', () =>
-  setActiveRouteModeTab('editor'),
+elements.planModeTab.addEventListener('click', () =>
+  setActiveRouteModeTab('plan'),
 );
-elements.routeFollowingTab.addEventListener('click', () =>
-  setActiveRouteModeTab('following'),
+elements.goModeTab.addEventListener('click', () => setActiveRouteModeTab('go'));
+elements.exitGoMode.addEventListener('click', () =>
+  setActiveRouteModeTab('plan'),
 );
+elements.goStart.addEventListener('click', startGoSession);
+elements.goPause.addEventListener('click', pauseGoSession);
+elements.goStop.addEventListener('click', stopGoSession);
+elements.goRecenter.addEventListener('click', recenterGoRoute);
 elements.currentRouteTab.addEventListener('click', () =>
   setActiveRouteTab('route'),
 );
@@ -2149,6 +2265,7 @@ window.addEventListener('resize', updateDeviceStatus);
 
 initMap();
 setActiveRouteTab(activeRouteTab);
+setActiveRouteModeTab(activeRouteModeTab);
 updateDeviceStatus();
 renderRouteImportPreview();
 renderImportPreview();
