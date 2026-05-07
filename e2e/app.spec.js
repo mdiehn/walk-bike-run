@@ -12,7 +12,14 @@ test('loads the route editor shell', async ({ page }) => {
   await expect(page.getByTestId('distance-text')).toHaveText('0.00 mi');
   await expect(page.getByTestId('estimated-time')).toHaveText('0m');
   await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
+  await expect(page.getByRole('tab', { name: 'Editor' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Following' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Following' }).click();
+  await expect(
+    page.getByText('Following controls will live here.'),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'Editor' }).click();
   await expect(page.getByTestId('undo-route-button')).toBeDisabled();
   await expect(page.getByTestId('redo-route-button')).toBeDisabled();
   await expect(
@@ -84,17 +91,16 @@ test('keeps cached geometry as stale reference after point edits', async ({
   await addPointAtMap(page);
 
   await expect(page.getByTestId('routing-status')).toHaveText(
-    'Route changed; showing stale routed geometry until you recalculate.',
+    'Route changed; showing stale routed geometry until you replot.',
   );
   await expect(page.getByTestId('recalculate-route-button')).toBeEnabled();
   expect(routeRequests).toBe(0);
 });
 
-
 test('adds map center to a loaded route', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(
-      'walkBikeRun.routeLibrary',
+      'walk-bike-run.routeLibrary.v1',
       JSON.stringify([
         {
           schemaVersion: 1,
@@ -115,7 +121,13 @@ test('adds map center to a loaded route', async ({ page }) => {
 
   await page.goto('/');
   await openLibraryTab(page);
-  await page.getByRole('button', { name: 'Load' }).click();
+  const loadedRouteRow = page.locator(
+    '[data-saved-route-id="saved-loaded-route"]',
+  );
+  await expect(loadedRouteRow).toBeVisible();
+  await loadedRouteRow
+    .locator('[data-load-saved-route="saved-loaded-route"]')
+    .click();
   await openCurrentRouteTab(page);
 
   await expect(page.getByTestId('point-row')).toHaveCount(1);
@@ -607,7 +619,7 @@ async function clearCurrentRoute(page) {
 }
 
 async function openCurrentRouteTab(page) {
-  await page.getByRole('tab', { name: 'Current route' }).click();
+  await page.getByRole('tab', { name: 'Route' }).click();
 }
 
 async function openLibraryTab(page) {

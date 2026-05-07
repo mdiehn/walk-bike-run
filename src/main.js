@@ -57,7 +57,10 @@ const persistedAppState = loadAppState();
 let route =
   persistedAppState.route ??
   createRoute({ name: 'New route', activityType: 'walk' });
-let activeRouteTab = persistedAppState.activeRouteTab ?? 'current';
+let activeRouteTab = normalizeRouteTab(persistedAppState.activeRouteTab);
+let activeRouteModeTab = normalizeRouteModeTab(
+  persistedAppState.activeRouteModeTab,
+);
 let librarySortBy = 'saved';
 let librarySortDirection = DEFAULT_LIBRARY_SORT_DIRECTIONS.saved;
 let libraryActivityFilter = 'all';
@@ -105,63 +108,49 @@ app.innerHTML = `
 
       <aside class="panel" aria-label="Route controls">
         <section class="panel-section route-summary-section">
-          <h2>Route</h2>
-          <label class="field-row">
-            <span class="route-name-label">Route name <span class="route-name-note">change and save to copy</span></span>
-            <input id="routeName" type="text" autocomplete="off" />
-          </label>
-          <label class="field-row">
-            <span>Activity</span>
-            <select id="activityType">
-              <option value="walk">Walk</option>
-              <option value="bike">Bike</option>
-              <option value="run">Run</option>
-            </select>
-          </label>
-          <label class="checkbox-row">
-            <input id="loopToggle" type="checkbox" />
-            Loop back to start
-          </label>
-          <div class="route-stats" aria-label="Route stats">
-            <div class="route-stat-card">
-              <span>Dist</span>
-              <strong id="distanceText" data-testid="distance-text">0.00 mi</strong>
-            </div>
-            <div class="route-stat-card">
-              <span>Time</span>
-              <strong id="estimatedTimeText" data-testid="estimated-time">0m</strong>
-            </div>
-            <div class="route-stat-card">
-              <span>Pace</span>
-              <strong id="paceText" data-testid="pace-text">20:00 m/mi</strong>
-            </div>
+          <div class="tab-list route-mode-tab-list" role="tablist" aria-label="Route mode">
+            <button id="routeEditorTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="routeEditorPanel">Editor</button>
+            <button id="routeFollowingTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="routeFollowingPanel">Following</button>
           </div>
-          <div class="button-row route-action-row">
-            <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
-            <button id="addMapCenter" type="button" class="secondary" data-testid="add-map-center-button">Add map center</button>
-            <button id="fitRoute" type="button" class="secondary">Fit</button>
-            <button id="replotRoute" type="button" class="secondary" data-testid="recalculate-route-button">Recalculate route</button>
-            <button id="clearPoints" type="button" class="secondary">Clear</button>
-          </div>
-          <div class="button-row route-history-row" aria-label="Route edit history">
-            <button id="undoRoute" type="button" class="secondary" data-testid="undo-route-button">Undo</button>
-            <button id="redoRoute" type="button" class="secondary" data-testid="redo-route-button">Redo</button>
-          </div>
-          <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
-          <div class="routing-settings" aria-label="Routing settings">
-            <label class="field-row compact-field">
-              <span>Routing</span>
-              <select id="routingProvider" data-testid="routing-provider">
-                <option value="auto">Auto</option>
-                <option value="openrouteservice">ORS/HEIGIT Worker</option>
-                <option value="osrm">OSRM fallback</option>
-              </select>
+
+          <div id="routeEditorPanel" class="route-mode-panel" role="tabpanel" aria-labelledby="routeEditorTab">
+            <div class="route-field-grid">
+              <label class="field-row route-name-field">
+                <span class="route-name-label">Route name <span class="route-name-note">change and save to copy</span></span>
+                <input id="routeName" type="text" autocomplete="off" />
+              </label>
+              <label class="field-row activity-field">
+                <span>Activity</span>
+                <select id="activityType">
+                  <option value="walk">Walk</option>
+                  <option value="bike">Bike</option>
+                  <option value="run">Run</option>
+                </select>
+              </label>
+            </div>
+            <label class="checkbox-row">
+              <input id="loopToggle" type="checkbox" />
+              Loop back to start
             </label>
-            <label class="field-row compact-field routing-url-field">
-              <span>Worker URL</span>
-              <input id="orsBaseUrl" type="url" autocomplete="off" placeholder="https://example.workers.dev" data-testid="ors-base-url" />
-            </label>
-            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until a Worker URL is set.</p>
+            <div class="route-stats" aria-label="Route stats">
+              <span><span class="stat-label">Dist</span> <strong id="distanceText" data-testid="distance-text">0.00 mi</strong></span>
+              <span><span class="stat-label">Time</span> <strong id="estimatedTimeText" data-testid="estimated-time">0m</strong></span>
+              <span><span class="stat-label">Pace</span> <strong id="paceText" data-testid="pace-text">20:00 m/mi</strong></span>
+            </div>
+            <div class="button-row route-action-row" aria-label="Route actions">
+              <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
+              <button id="addMapCenter" type="button" class="secondary" data-testid="add-map-center-button">Add map center</button>
+              <button id="fitRoute" type="button" class="secondary">Fit</button>
+              <button id="replotRoute" type="button" class="secondary" data-testid="recalculate-route-button">Replot</button>
+              <button id="clearPoints" type="button" class="secondary">Clear</button>
+              <button id="undoRoute" type="button" class="secondary" data-testid="undo-route-button">Undo</button>
+              <button id="redoRoute" type="button" class="secondary" data-testid="redo-route-button">Redo</button>
+            </div>
+            <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
+          </div>
+
+          <div id="routeFollowingPanel" class="route-mode-panel following-panel" role="tabpanel" aria-labelledby="routeFollowingTab" hidden>
+            <p class="hint-text following-placeholder">Following controls will live here. Route editing stays in Editor.</p>
           </div>
         </section>
 
@@ -173,12 +162,10 @@ app.innerHTML = `
         </div>
 
         <section class="panel-section route-workspace">
-          <div class="section-title-row">
-            <h2>Routes</h2>
-          </div>
-          <div class="tab-list" role="tablist" aria-label="Route workspace">
-            <button id="currentRouteTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="currentRoutePanel">Current route</button>
+          <div class="tab-list workspace-tab-list" role="tablist" aria-label="Route workspace">
+            <button id="currentRouteTab" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="currentRoutePanel">Route</button>
             <button id="libraryTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="libraryPanel">Library</button>
+            <button id="settingsTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel">Settings</button>
           </div>
 
           <div id="currentRoutePanel" class="tab-panel" role="tabpanel" aria-labelledby="currentRouteTab">
@@ -235,9 +222,45 @@ app.innerHTML = `
             </div>
             <ol id="savedRouteList" class="saved-route-list" data-testid="saved-route-list"></ol>
           </div>
+
+          <div id="settingsPanel" class="tab-panel" role="tabpanel" aria-labelledby="settingsTab" hidden>
+            <h3 class="tab-subtitle">Settings</h3>
+            <div class="settings-group routing-settings" aria-label="Routing settings">
+              <h4>Routing</h4>
+            <label class="field-row compact-field">
+              <span>Routing</span>
+              <select id="routingProvider" data-testid="routing-provider">
+                <option value="auto">Auto</option>
+                <option value="openrouteservice">ORS/HEIGIT Worker</option>
+                <option value="osrm">OSRM fallback</option>
+              </select>
+            </label>
+            <label class="field-row compact-field routing-url-field">
+              <span>Worker URL</span>
+              <input id="orsBaseUrl" type="url" autocomplete="off" placeholder="https://example.workers.dev" data-testid="ors-base-url" />
+            </label>
+            <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until a Worker URL is set.</p>
+            </div>
+            <div class="settings-group cloud-storage-panel" aria-label="Google Drive library backup">
+              <h4>Google Drive backup</h4>
+              <label class="field-row compact-field">
+                <span>Google Client ID</span>
+                <input id="googleClientId" type="text" autocomplete="off" placeholder="1234567890-example.apps.googleusercontent.com" data-testid="google-client-id" />
+              </label>
+              <div class="button-row cloud-action-row">
+                <button id="connectGoogleDrive" type="button" class="secondary">Connect Google Drive</button>
+                <button id="disconnectGoogleDrive" type="button" class="secondary">Disconnect</button>
+              </div>
+              <div class="button-row cloud-action-row">
+                <button id="saveLibraryToDrive" type="button" class="secondary">Save library to Google Drive</button>
+                <button id="loadLibraryFromDrive" type="button" class="secondary">Load library from Google Drive</button>
+              </div>
+              <p id="googleDriveStatus" class="hint-text" data-testid="google-drive-status">Google Drive is not connected.</p>
+            </div>
+          </div>
         </section>
 
-        <section class="panel-section backup-section">
+        <section id="backupSection" class="panel-section backup-section">
           <h2 id="backupHeading">Current route backup</h2>
           <div id="currentRouteBackupControls">
             <div class="button-row">
@@ -264,22 +287,6 @@ app.innerHTML = `
               <input id="importLibraryFile" class="sr-only" type="file" accept="application/json,.json" />
             </div>
             <p id="backupStatus" class="hint-text" data-testid="backup-status">Back up saved routes as app JSON.</p>
-            <div class="cloud-storage-panel" aria-label="Google Drive library backup">
-              <h3>Google Drive backup</h3>
-              <label class="field-row compact-field">
-                <span>Google Client ID</span>
-                <input id="googleClientId" type="text" autocomplete="off" placeholder="1234567890-example.apps.googleusercontent.com" data-testid="google-client-id" />
-              </label>
-              <div class="button-row cloud-action-row">
-                <button id="connectGoogleDrive" type="button" class="secondary">Connect Google Drive</button>
-                <button id="disconnectGoogleDrive" type="button" class="secondary">Disconnect</button>
-              </div>
-              <div class="button-row cloud-action-row">
-                <button id="saveLibraryToDrive" type="button" class="secondary">Save library to Google Drive</button>
-                <button id="loadLibraryFromDrive" type="button" class="secondary">Load library from Google Drive</button>
-              </div>
-              <p id="googleDriveStatus" class="hint-text" data-testid="google-drive-status">Google Drive is not connected.</p>
-            </div>
             <div id="importPreview" class="import-preview is-hidden" data-testid="import-preview" hidden>
               <p id="importPreviewText"></p>
               <div class="button-row">
@@ -366,10 +373,17 @@ const elements = {
   saveLibraryToDrive: document.querySelector('#saveLibraryToDrive'),
   loadLibraryFromDrive: document.querySelector('#loadLibraryFromDrive'),
   googleDriveStatus: document.querySelector('#googleDriveStatus'),
+  routeEditorTab: document.querySelector('#routeEditorTab'),
+  routeFollowingTab: document.querySelector('#routeFollowingTab'),
+  routeEditorPanel: document.querySelector('#routeEditorPanel'),
+  routeFollowingPanel: document.querySelector('#routeFollowingPanel'),
   currentRouteTab: document.querySelector('#currentRouteTab'),
   libraryTab: document.querySelector('#libraryTab'),
+  settingsTab: document.querySelector('#settingsTab'),
   currentRoutePanel: document.querySelector('#currentRoutePanel'),
   libraryPanel: document.querySelector('#libraryPanel'),
+  settingsPanel: document.querySelector('#settingsPanel'),
+  backupSection: document.querySelector('#backupSection'),
   librarySortButtons: document.querySelectorAll('[data-library-sort-key]'),
   libraryFilterButtons: document.querySelectorAll('[data-library-filter-key]'),
   libraryFilterPanel: document.querySelector('#libraryFilterPanel'),
@@ -964,28 +978,79 @@ function updateSavedRouteFromCurrent(savedRouteId) {
   renderRoute();
 }
 
-function setActiveRouteTab(tabName) {
-  activeRouteTab = tabName === 'library' ? 'library' : 'current';
+function normalizeRouteModeTab(tabName) {
+  if (tabName === 'following') return 'following';
+  return 'editor';
+}
 
+function setActiveRouteModeTab(tabName) {
+  activeRouteModeTab = normalizeRouteModeTab(tabName);
+
+  const showEditor = activeRouteModeTab === 'editor';
+  const showFollowing = activeRouteModeTab === 'following';
+
+  elements.routeEditorPanel.hidden = !showEditor;
+  elements.routeFollowingPanel.hidden = !showFollowing;
+
+  elements.routeEditorTab.classList.toggle('is-active', showEditor);
+  elements.routeFollowingTab.classList.toggle('is-active', showFollowing);
+
+  elements.routeEditorTab.setAttribute(
+    'aria-selected',
+    showEditor ? 'true' : 'false',
+  );
+  elements.routeFollowingTab.setAttribute(
+    'aria-selected',
+    showFollowing ? 'true' : 'false',
+  );
+
+  persistAppState();
+}
+
+function normalizeRouteTab(tabName) {
+  if (tabName === 'library') return 'library';
+  if (tabName === 'settings') return 'settings';
+  return 'route';
+}
+
+function setActiveRouteTab(tabName) {
+  activeRouteTab = normalizeRouteTab(tabName);
+
+  const showRoute = activeRouteTab === 'route';
   const showLibrary = activeRouteTab === 'library';
-  elements.currentRoutePanel.hidden = showLibrary;
+  const showSettings = activeRouteTab === 'settings';
+
+  elements.currentRoutePanel.hidden = !showRoute;
   elements.libraryPanel.hidden = !showLibrary;
-  elements.currentRouteTab.classList.toggle('is-active', !showLibrary);
+  elements.settingsPanel.hidden = !showSettings;
+
+  elements.currentRouteTab.classList.toggle('is-active', showRoute);
   elements.libraryTab.classList.toggle('is-active', showLibrary);
+  elements.settingsTab.classList.toggle('is-active', showSettings);
+
   elements.currentRouteTab.setAttribute(
     'aria-selected',
-    showLibrary ? 'false' : 'true',
+    showRoute ? 'true' : 'false',
   );
   elements.libraryTab.setAttribute(
     'aria-selected',
     showLibrary ? 'true' : 'false',
   );
+  elements.settingsTab.setAttribute(
+    'aria-selected',
+    showSettings ? 'true' : 'false',
+  );
+
   renderBackupPanel();
   persistAppState();
 }
 
 function renderBackupPanel() {
+  const showSettings = activeRouteTab === 'settings';
   const showLibraryBackup = activeRouteTab === 'library';
+
+  elements.backupSection.hidden = showSettings;
+  if (showSettings) return;
 
   elements.backupHeading.textContent = showLibraryBackup
     ? 'Library backup'
@@ -1325,8 +1390,8 @@ function loadAppState(storage = globalThis.localStorage) {
           ? parsedState.activeSavedRouteId
           : null,
       routeDirty: Boolean(parsedState.routeDirty),
-      activeRouteTab:
-        parsedState.activeRouteTab === 'library' ? 'library' : 'current',
+      activeRouteTab: normalizeRouteTab(parsedState.activeRouteTab),
+      activeRouteModeTab: normalizeRouteModeTab(parsedState.activeRouteModeTab),
       mapView:
         center &&
         Number.isFinite(center[0]) &&
@@ -1356,6 +1421,7 @@ function persistAppState(storage = globalThis.localStorage) {
     activeSavedRouteId,
     routeDirty,
     activeRouteTab,
+    activeRouteModeTab,
     mapView,
   };
 
@@ -1723,7 +1789,7 @@ function getRoutingStatusText() {
   if (routePlan.status === 'pending')
     return `Recalculating with ${providerLabel}...`;
   if (isRouteGeometryStale()) {
-    return `Route changed; showing stale routed geometry until you recalculate.`;
+    return `Route changed; showing stale routed geometry until you replot.`;
   }
   if (routePlan.status === 'partial-fallback') {
     return `${providerLabel} used where possible; straight-line fallback for one or more segments.`;
@@ -1895,11 +1961,20 @@ elements.loopToggle.addEventListener('change', (event) => {
 });
 
 elements.saveRoute.addEventListener('click', () => saveCurrentRoute());
+elements.routeEditorTab.addEventListener('click', () =>
+  setActiveRouteModeTab('editor'),
+);
+elements.routeFollowingTab.addEventListener('click', () =>
+  setActiveRouteModeTab('following'),
+);
 elements.currentRouteTab.addEventListener('click', () =>
-  setActiveRouteTab('current'),
+  setActiveRouteTab('route'),
 );
 elements.libraryTab.addEventListener('click', () =>
   setActiveRouteTab('library'),
+);
+elements.settingsTab.addEventListener('click', () =>
+  setActiveRouteTab('settings'),
 );
 elements.librarySortButtons.forEach((button) => {
   button.addEventListener('click', () =>
