@@ -61,6 +61,7 @@ let activeRouteTab = normalizeRouteTab(persistedAppState.activeRouteTab);
 let activeRouteModeTab = normalizeRouteModeTab(
   persistedAppState.activeRouteModeTab,
 );
+let pointTouchMode = normalizePointTouchMode(persistedAppState.pointTouchMode);
 let librarySortBy = 'saved';
 let librarySortDirection = DEFAULT_LIBRARY_SORT_DIRECTIONS.saved;
 let libraryActivityFilter = 'all';
@@ -96,7 +97,7 @@ app.innerHTML = `
       <div>
         <p class="eyebrow">Walk Bike Run</p>
         <h1>Build a route.</h1>
-        <p class="subtitle">Click or tap the map to add points. Drag markers to move them.</p>
+        <p class="subtitle">Tap the map to add points. Drag markers to move them.</p>
       </div>
       <div class="version-pill" title="App version">v${APP_VERSION}</div>
     </header>
@@ -139,12 +140,18 @@ app.innerHTML = `
             </div>
             <div class="button-row route-action-row" aria-label="Route actions">
               <button id="saveRoute" type="button" data-testid="save-route-button">Save</button>
-              <button id="addMapCenter" type="button" class="secondary" data-testid="add-map-center-button">Add map center</button>
               <button id="fitRoute" type="button" class="secondary">Fit</button>
               <button id="replotRoute" type="button" class="secondary" data-testid="recalculate-route-button">Replot</button>
               <button id="clearPoints" type="button" class="secondary">Clear</button>
               <button id="undoRoute" type="button" class="secondary" data-testid="undo-route-button">Undo</button>
               <button id="redoRoute" type="button" class="secondary" data-testid="redo-route-button">Redo</button>
+            </div>
+            <div class="point-mode-row" aria-label="Point tap mode">
+              <span class="point-mode-label">Point tap</span>
+              <div class="segmented-control">
+                <button id="pointAddMode" type="button" class="segmented-button is-active" data-point-mode="add" aria-pressed="true">Add</button>
+                <button id="pointDeleteMode" type="button" class="segmented-button" data-point-mode="delete" aria-pressed="false">Del</button>
+              </div>
             </div>
             <p id="saveStatus" class="save-status" data-testid="save-status">Unsaved route</p>
           </div>
@@ -332,8 +339,9 @@ const elements = {
   clearPoints: document.querySelector('#clearPoints'),
   undoRoute: document.querySelector('#undoRoute'),
   redoRoute: document.querySelector('#redoRoute'),
+  pointAddMode: document.querySelector('#pointAddMode'),
+  pointDeleteMode: document.querySelector('#pointDeleteMode'),
   saveRoute: document.querySelector('#saveRoute'),
-  addMapCenter: document.querySelector('#addMapCenter'),
   routingProvider: document.querySelector('#routingProvider'),
   orsBaseUrl: document.querySelector('#orsBaseUrl'),
   routingStatus: document.querySelector('#routingStatus'),
@@ -418,6 +426,8 @@ function initMap() {
   pointLayer = L.layerGroup().addTo(map);
 
   map.on('click', (event) => {
+    if (pointTouchMode !== 'add') return;
+
     addRoutePoint(
       event.latlng.lat,
       event.latlng.lng,
@@ -434,13 +444,6 @@ function addRoutePoint(lat, lng, name) {
   pushUndoSnapshot();
   route = addPoint(route, { lat, lng, name });
   markRouteDirty({ geometryChanged: true });
-}
-
-function addRoutePointAtMapCenter() {
-  if (!map) return;
-
-  const center = map.getCenter();
-  addRoutePoint(center.lat, center.lng, `Point ${route.points.length + 1}`);
 }
 
 function createRouteSnapshot() {
@@ -545,6 +548,7 @@ function renderRoute() {
   elements.replotRoute.classList.toggle('is-dirty', isRouteGeometryStale());
   elements.undoRoute.disabled = undoStack.length === 0;
   elements.redoRoute.disabled = redoStack.length === 0;
+  renderPointTouchMode();
   renderRoutingSettings();
   renderCloudSettings();
   renderBackupPanel();
@@ -879,6 +883,14 @@ function renderMapRoute() {
       markRouteDirty({ geometryChanged: true });
     });
 
+    marker.on('click', () => {
+      if (pointTouchMode !== 'delete') return;
+
+      pushUndoSnapshot();
+      route = deletePoint(route, point.id);
+      markRouteDirty({ geometryChanged: true });
+    });
+
     marker.bindTooltip(`${index + 1}. ${point.name}`);
     marker.addTo(pointLayer);
   });
@@ -976,6 +988,26 @@ function updateSavedRouteFromCurrent(savedRouteId) {
   routeDirty = false;
   persistLibrary();
   renderRoute();
+}
+
+
+function normalizePointTouchMode(modeName) {
+  if (modeName === 'delete') return 'delete';
+  return 'add';
+}
+
+function setPointTouchMode(modeName) {
+  pointTouchMode = normalizePointTouchMode(modeName);
+  renderPointTouchMode();
+  persistAppState();
+}
+
+function renderPointTouchMode() {
+  const isDelete = pointTouchMode === 'delete';
+  elements.pointAddMode.classList.toggle('is-active', !isDelete);
+  elements.pointDeleteMode.classList.toggle('is-active', isDelete);
+  elements.pointAddMode.setAttribute('aria-pressed', !isDelete ? 'true' : 'false');
+  elements.pointDeleteMode.setAttribute('aria-pressed', isDelete ? 'true' : 'false');
 }
 
 function normalizeRouteModeTab(tabName) {
@@ -1392,6 +1424,7 @@ function loadAppState(storage = globalThis.localStorage) {
       routeDirty: Boolean(parsedState.routeDirty),
       activeRouteTab: normalizeRouteTab(parsedState.activeRouteTab),
       activeRouteModeTab: normalizeRouteModeTab(parsedState.activeRouteModeTab),
+      pointTouchMode: normalizePointTouchMode(parsedState.pointTouchMode),
       mapView:
         center &&
         Number.isFinite(center[0]) &&
@@ -1422,6 +1455,7 @@ function persistAppState(storage = globalThis.localStorage) {
     routeDirty,
     activeRouteTab,
     activeRouteModeTab,
+    pointTouchMode,
     mapView,
   };
 
@@ -1936,11 +1970,12 @@ elements.orsBaseUrl.addEventListener('change', (event) => {
   renderRoute();
 });
 
-elements.addMapCenter.addEventListener('click', addRoutePointAtMapCenter);
 elements.fitRoute.addEventListener('click', fitRouteToMap);
 elements.replotRoute.addEventListener('click', recalculateRoute);
 elements.undoRoute.addEventListener('click', undoRouteEdit);
 elements.redoRoute.addEventListener('click', redoRouteEdit);
+elements.pointAddMode.addEventListener('click', () => setPointTouchMode('add'));
+elements.pointDeleteMode.addEventListener('click', () => setPointTouchMode('delete'));
 
 elements.clearPoints.addEventListener('click', () => {
   if (!confirmClearRoute()) return;

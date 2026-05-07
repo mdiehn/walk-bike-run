@@ -351,7 +351,7 @@ select:focus {
 .route-action-row {
   display: grid;
   gap: 0.3rem;
-  grid-template-columns: 0.95fr 1.75fr 0.75fr 0.95fr 0.85fr 0.85fr 0.85fr;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .route-action-row button {
@@ -360,6 +360,48 @@ select:focus {
   padding-left: 0.24rem;
   padding-right: 0.24rem;
   width: 100%;
+}
+
+.point-mode-row {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+}
+
+.point-mode-label {
+  color: var(--wbr-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.segmented-control {
+  background: #eef1f4;
+  border: 1px solid var(--wbr-border);
+  border-radius: var(--wbr-radius);
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.segmented-button {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--wbr-text);
+  font-size: 0.72rem;
+  min-height: 1.6rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.segmented-button + .segmented-button {
+  border-left: 1px solid var(--wbr-border);
+}
+
+.segmented-button.is-active {
+  background: var(--wbr-primary);
+  color: #ffffff;
 }
 
 #saveRoute:not(.is-dirty) {
@@ -1012,10 +1054,6 @@ select:focus {
 
   .route-action-row {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  #addMapCenter {
-    grid-column: span 2;
   }
 
   .library-table-header,
