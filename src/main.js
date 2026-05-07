@@ -62,6 +62,9 @@ let activeRouteModeTab = normalizeRouteModeTab(
   persistedAppState.activeRouteModeTab,
 );
 let goSessionStatus = 'ready';
+let finishHoldTimer = null;
+let finishHoldCompleted = false;
+let lastGoStats = null;
 let pointTouchMode = normalizePointTouchMode(persistedAppState.pointTouchMode);
 let librarySortBy = 'saved';
 let librarySortDirection = DEFAULT_LIBRARY_SORT_DIRECTIONS.saved;
@@ -110,12 +113,11 @@ app.innerHTML = `
 
       <aside class="panel" aria-label="Route controls">
         <section class="panel-section route-summary-section">
-          <div class="mode-switch" aria-label="App mode">
-            <button id="planModeTab" class="mode-switch-button is-active" type="button" aria-pressed="true">Plan</button>
-            <button id="goModeTab" class="mode-switch-button" type="button" aria-pressed="false">Go</button>
-          </div>
-
           <div id="planModePanel" class="route-mode-panel" aria-label="Plan mode">
+            <div class="plan-mode-header">
+              <span class="eyebrow plan-mode-eyebrow">Plan mode</span>
+              <button id="enterGoMode" class="secondary mode-toggle-button" type="button">Go</button>
+            </div>
             <div class="route-field-grid">
               <label class="field-row route-name-field">
                 <span class="route-name-label">Route name <span class="route-name-note">change and save to copy</span></span>
@@ -192,13 +194,38 @@ app.innerHTML = `
                 <span id="goProgressBar" class="go-progress-bar"></span>
               </div>
             </div>
-            <div class="go-control-grid" aria-label="Go controls">
-              <button id="goStart" type="button" class="go-primary-control" data-testid="go-start-button">Start</button>
-              <button id="goPause" type="button" class="secondary go-control" data-testid="go-pause-button">Pause</button>
-              <button id="goStop" type="button" class="danger go-control" data-testid="go-stop-button">Stop</button>
-              <button id="goRecenter" type="button" class="secondary go-control" data-testid="go-recenter-button">Recenter</button>
+            <div id="goActivePanel" class="go-active-panel">
+              <div class="go-control-grid" aria-label="Go controls">
+                <button id="goPrimaryAction" type="button" class="go-primary-control go-primary-start" data-testid="go-primary-action">
+                  <span id="goPrimaryLabel">Start</span>
+                  <span id="goPrimaryHint" class="go-primary-hint" hidden>Hold to Finish</span>
+                </button>
+                <button id="goRecenter" type="button" class="secondary go-control" data-testid="go-recenter-button">Recenter</button>
+              </div>
+              <p class="hint-text go-mode-note">Live tracking comes later. This first pass uses the current planned route for readable route-use stats.</p>
             </div>
-            <p class="hint-text go-mode-note">Live tracking comes later. This first pass uses the current planned route for readable route-use stats.</p>
+            <div id="goCompletePanel" class="go-complete-panel" data-testid="go-complete-panel" hidden>
+              <p class="eyebrow go-complete-eyebrow">Yayy!!</p>
+              <h3>Route stats saved</h3>
+              <dl class="go-complete-stats">
+                <div>
+                  <dt>Route</dt>
+                  <dd id="goCompleteRouteName" data-testid="go-complete-route-name">New route</dd>
+                </div>
+                <div>
+                  <dt>Distance</dt>
+                  <dd id="goCompleteDistance" data-testid="go-complete-distance">0.00 mi</dd>
+                </div>
+                <div>
+                  <dt>Elapsed</dt>
+                  <dd id="goCompleteElapsed" data-testid="go-complete-elapsed">0:00</dd>
+                </div>
+                <div>
+                  <dt>Pace / speed</dt>
+                  <dd id="goCompletePace" data-testid="go-complete-pace">20:00 m/mi</dd>
+                </div>
+              </dl>
+            </div>
           </div>
         </section>
 
@@ -422,8 +449,7 @@ const elements = {
   saveLibraryToDrive: document.querySelector('#saveLibraryToDrive'),
   loadLibraryFromDrive: document.querySelector('#loadLibraryFromDrive'),
   googleDriveStatus: document.querySelector('#googleDriveStatus'),
-  planModeTab: document.querySelector('#planModeTab'),
-  goModeTab: document.querySelector('#goModeTab'),
+  enterGoMode: document.querySelector('#enterGoMode'),
   planModePanel: document.querySelector('#planModePanel'),
   goModePanel: document.querySelector('#goModePanel'),
   exitGoMode: document.querySelector('#exitGoMode'),
@@ -435,10 +461,16 @@ const elements = {
   goStatusText: document.querySelector('#goStatusText'),
   goProgressText: document.querySelector('#goProgressText'),
   goProgressBar: document.querySelector('#goProgressBar'),
-  goStart: document.querySelector('#goStart'),
-  goPause: document.querySelector('#goPause'),
-  goStop: document.querySelector('#goStop'),
+  goActivePanel: document.querySelector('#goActivePanel'),
+  goPrimaryAction: document.querySelector('#goPrimaryAction'),
+  goPrimaryLabel: document.querySelector('#goPrimaryLabel'),
+  goPrimaryHint: document.querySelector('#goPrimaryHint'),
   goRecenter: document.querySelector('#goRecenter'),
+  goCompletePanel: document.querySelector('#goCompletePanel'),
+  goCompleteRouteName: document.querySelector('#goCompleteRouteName'),
+  goCompleteDistance: document.querySelector('#goCompleteDistance'),
+  goCompleteElapsed: document.querySelector('#goCompleteElapsed'),
+  goCompletePace: document.querySelector('#goCompletePace'),
   currentRouteTab: document.querySelector('#currentRouteTab'),
   libraryTab: document.querySelector('#libraryTab'),
   settingsTab: document.querySelector('#settingsTab'),
@@ -1084,47 +1116,83 @@ function setActiveRouteModeTab(tabName) {
   elements.planModePanel.hidden = !showPlan;
   elements.goModePanel.hidden = !showGo;
 
-  elements.planModeTab.classList.toggle('is-active', showPlan);
-  elements.goModeTab.classList.toggle('is-active', showGo);
-
-  elements.planModeTab.setAttribute(
-    'aria-pressed',
-    showPlan ? 'true' : 'false',
-  );
-  elements.goModeTab.setAttribute('aria-pressed', showGo ? 'true' : 'false');
-
   renderGoMode();
   persistAppState();
 }
 
 function renderGoMode() {
   const routeDistanceMeters = getDisplayedRouteDistanceMeters();
+  const displayedPace = formatDisplayedPace(routeDistanceMeters);
 
   elements.goRouteName.textContent = route.name || 'New route';
   elements.goDistanceText.textContent = formatMiles(routeDistanceMeters);
   elements.goElapsedText.textContent = '0:00';
-  elements.goPaceText.textContent = formatDisplayedPace(routeDistanceMeters);
+  elements.goPaceText.textContent = displayedPace;
   elements.goRemainingText.textContent = formatMiles(routeDistanceMeters);
-  elements.goProgressText.textContent = '0%';
-  elements.goProgressBar.style.width = '0%';
+  elements.goProgressText.textContent = goSessionStatus === 'complete' ? '100%' : '0%';
+  elements.goProgressBar.style.width = goSessionStatus === 'complete' ? '100%' : '0%';
   elements.goStatusText.textContent = getGoStatusText();
 
-  const isRunning = goSessionStatus === 'running';
-  const isPaused = goSessionStatus === 'paused';
   const hasRoute = route.points.length > 0;
+  const showCompletePanel = goSessionStatus === 'complete';
+  const buttonState = getGoPrimaryButtonState();
 
-  elements.goStart.textContent = isPaused ? 'Resume' : 'Start';
-  elements.goStart.disabled = !hasRoute || isRunning;
-  elements.goPause.disabled = !isRunning;
-  elements.goStop.disabled = goSessionStatus === 'ready';
+  elements.goActivePanel.hidden = showCompletePanel;
+  elements.goCompletePanel.hidden = !showCompletePanel;
+  elements.goPrimaryLabel.textContent = buttonState.label;
+  elements.goPrimaryHint.hidden = !buttonState.showHint;
+  elements.goPrimaryAction.disabled = !hasRoute;
+  elements.goPrimaryAction.classList.remove(
+    'go-primary-start',
+    'go-primary-pause',
+    'go-primary-resume',
+    'go-primary-done',
+  );
+  elements.goPrimaryAction.classList.add(buttonState.className);
   elements.goRecenter.disabled = route.points.length === 0;
+  renderGoCompleteStats();
+}
+
+function getGoPrimaryButtonState() {
+  if (goSessionStatus === 'running') {
+    return { label: 'Pause', showHint: false, className: 'go-primary-pause' };
+  }
+  if (goSessionStatus === 'paused') {
+    return { label: 'Resume', showHint: true, className: 'go-primary-resume' };
+  }
+  if (goSessionStatus === 'done') {
+    return { label: 'Done', showHint: false, className: 'go-primary-done' };
+  }
+  return { label: 'Start', showHint: false, className: 'go-primary-start' };
 }
 
 function getGoStatusText() {
   if (route.points.length === 0) return 'Plan a route first';
   if (goSessionStatus === 'running') return 'Moving placeholder';
   if (goSessionStatus === 'paused') return 'Paused';
+  if (goSessionStatus === 'done') return 'Ready to save';
+  if (goSessionStatus === 'complete') return 'Done';
   return 'Ready to go';
+}
+
+function handleGoPrimaryAction() {
+  if (finishHoldCompleted) {
+    finishHoldCompleted = false;
+    return;
+  }
+  if (route.points.length === 0) return;
+
+  if (goSessionStatus === 'running') {
+    pauseGoSession();
+    return;
+  }
+
+  if (goSessionStatus === 'done') {
+    completeGoSession();
+    return;
+  }
+
+  startGoSession();
 }
 
 function startGoSession() {
@@ -1139,9 +1207,59 @@ function pauseGoSession() {
   renderGoMode();
 }
 
-function stopGoSession() {
-  goSessionStatus = 'ready';
+function markGoSessionDone() {
+  if (goSessionStatus !== 'paused') return;
+  goSessionStatus = 'done';
+  finishHoldCompleted = true;
   renderGoMode();
+}
+
+function completeGoSession() {
+  lastGoStats = createGoStatsSnapshot();
+  saveLastGoStats(lastGoStats);
+  goSessionStatus = 'complete';
+  renderGoMode();
+}
+
+function renderGoCompleteStats() {
+  const stats = lastGoStats ?? createGoStatsSnapshot();
+  elements.goCompleteRouteName.textContent = stats.routeName;
+  elements.goCompleteDistance.textContent = stats.distance;
+  elements.goCompleteElapsed.textContent = stats.elapsed;
+  elements.goCompletePace.textContent = stats.pace;
+}
+
+function createGoStatsSnapshot() {
+  const routeDistanceMeters = getDisplayedRouteDistanceMeters();
+  return {
+    routeName: route.name || 'New route',
+    activityType: route.activityType,
+    distance: formatMiles(routeDistanceMeters),
+    elapsed: '0:00',
+    pace: formatDisplayedPace(routeDistanceMeters),
+    completedAt: new Date().toISOString(),
+  };
+}
+
+function saveLastGoStats(stats) {
+  try {
+    window.localStorage?.setItem('walkBikeRun.lastGoStats', JSON.stringify(stats));
+  } catch {
+    // Ignore localStorage failures; the completion screen still shows the stats.
+  }
+}
+
+function beginFinishHold() {
+  if (goSessionStatus !== 'paused') return;
+  finishHoldCompleted = false;
+  clearFinishHoldTimer();
+  finishHoldTimer = window.setTimeout(markGoSessionDone, 900);
+}
+
+function clearFinishHoldTimer() {
+  if (!finishHoldTimer) return;
+  window.clearTimeout(finishHoldTimer);
+  finishHoldTimer = null;
 }
 
 function recenterGoRoute() {
@@ -2107,16 +2225,15 @@ elements.loopToggle.addEventListener('change', (event) => {
 });
 
 elements.saveRoute.addEventListener('click', () => saveCurrentRoute());
-elements.planModeTab.addEventListener('click', () =>
-  setActiveRouteModeTab('plan'),
-);
-elements.goModeTab.addEventListener('click', () => setActiveRouteModeTab('go'));
+elements.enterGoMode.addEventListener('click', () => setActiveRouteModeTab('go'));
 elements.exitGoMode.addEventListener('click', () =>
   setActiveRouteModeTab('plan'),
 );
-elements.goStart.addEventListener('click', startGoSession);
-elements.goPause.addEventListener('click', pauseGoSession);
-elements.goStop.addEventListener('click', stopGoSession);
+elements.goPrimaryAction.addEventListener('click', handleGoPrimaryAction);
+elements.goPrimaryAction.addEventListener('pointerdown', beginFinishHold);
+elements.goPrimaryAction.addEventListener('pointerup', clearFinishHoldTimer);
+elements.goPrimaryAction.addEventListener('pointerleave', clearFinishHoldTimer);
+elements.goPrimaryAction.addEventListener('pointercancel', clearFinishHoldTimer);
 elements.goRecenter.addEventListener('click', recenterGoRoute);
 elements.currentRouteTab.addEventListener('click', () =>
   setActiveRouteTab('route'),

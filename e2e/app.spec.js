@@ -12,7 +12,6 @@ test('loads the route editor shell', async ({ page }) => {
   await expect(page.getByTestId('distance-text')).toHaveText('0.00 mi');
   await expect(page.getByTestId('estimated-time')).toHaveText('0m');
   await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
-  await expect(page.getByRole('button', { name: 'Plan' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Go' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
   await page.getByRole('button', { name: 'Go' }).click();
@@ -40,25 +39,43 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await expect(page.getByTestId('go-distance-text')).not.toHaveText('0.00 mi');
   await expect(page.getByTestId('go-elapsed-text')).toHaveText('0:00');
   await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
-  await expect(page.getByTestId('go-start-button')).toBeEnabled();
-  await expect(page.getByTestId('go-pause-button')).toBeDisabled();
-  await expect(page.getByTestId('go-stop-button')).toBeDisabled();
+  await expect(page.getByTestId('go-primary-action')).toBeEnabled();
+  await expect(page.getByTestId('go-primary-action')).toContainText('Start');
   await expect(page.getByTestId('go-recenter-button')).toBeEnabled();
 
-  await page.getByTestId('go-start-button').click();
+  await page.getByTestId('go-primary-action').click();
   await expect(page.getByTestId('go-status-text')).toHaveText(
     'Moving placeholder',
   );
-  await expect(page.getByTestId('go-start-button')).toBeDisabled();
-  await expect(page.getByTestId('go-pause-button')).toBeEnabled();
-  await expect(page.getByTestId('go-stop-button')).toBeEnabled();
+  await expect(page.getByTestId('go-primary-action')).toContainText('Pause');
 
-  await page.getByTestId('go-pause-button').click();
+  await page.getByTestId('go-primary-action').click();
   await expect(page.getByTestId('go-status-text')).toHaveText('Paused');
-  await expect(page.getByTestId('go-start-button')).toHaveText('Resume');
+  await expect(page.getByTestId('go-primary-action')).toContainText('Resume');
+  await expect(page.getByTestId('go-primary-action')).toContainText('Hold to Finish');
 
-  await page.getByTestId('go-stop-button').click();
-  await expect(page.getByTestId('go-status-text')).toHaveText('Ready to go');
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText(
+    'Moving placeholder',
+  );
+  await expect(page.getByTestId('go-primary-action')).toContainText('Pause');
+
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Paused');
+  await expect(page.getByTestId('go-primary-action')).toContainText('Resume');
+
+  await page.getByTestId('go-primary-action').hover();
+  await page.mouse.down();
+  await page.waitForTimeout(950);
+  await page.mouse.up();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Ready to save');
+  await expect(page.getByTestId('go-primary-action')).toContainText('Done');
+
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-complete-panel')).toBeVisible();
+  await expect(page.getByTestId('go-complete-route-name')).toHaveText('New route');
+  await expect(page.getByTestId('go-complete-distance')).not.toHaveText('0.00 mi');
+
   await page.getByRole('button', { name: 'Plan' }).click();
   await expect(page.getByTestId('undo-route-button')).toBeEnabled();
 });
