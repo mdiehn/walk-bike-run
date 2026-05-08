@@ -6,6 +6,7 @@ import {
   totalDistanceMeters,
 } from '../src/route-model.js';
 import {
+  addRouteHistoryEntry,
   createSavedRoute,
   deleteSavedRoute,
   duplicateSavedRoute,
@@ -206,6 +207,85 @@ describe('route library', () => {
     expect(savedRoute.points).toEqual(route.points);
     expect(savedRoute.routedGeometry.isStale).toBe(true);
     expect(savedRoute.distanceMeters).toBe(totalDistanceMeters(route));
+  });
+
+
+  it('attaches completed Go history to the active saved route', () => {
+    const savedRoute = createSavedRoute(
+      createRoute({
+        name: 'Rail trail loop',
+        points: [
+          { id: 'a', name: 'A', lat: 43, lng: -72 },
+          { id: 'b', name: 'B', lat: 43.01, lng: -72.01 },
+        ],
+      }),
+      {
+        id: 'saved-a',
+        now: '2026-05-03T12:00:00.000Z',
+      },
+    );
+
+    const result = addRouteHistoryEntry(
+      [savedRoute],
+      savedRouteToRoute(savedRoute),
+      {
+        savedRouteId: 'saved-a',
+        now: '2026-05-08T12:00:00.000Z',
+        stats: {
+          distanceMeters: 1234,
+          elapsedSeconds: 600,
+          distance: '0.77 mi',
+          elapsed: '10:00',
+          pace: '12:59 /mi',
+          completedAt: '2026-05-08T12:00:00.000Z',
+        },
+      },
+    );
+
+    expect(result.savedRouteId).toBe('saved-a');
+    expect(result.library).toHaveLength(1);
+    expect(result.library[0].history).toHaveLength(1);
+    expect(result.library[0].history[0]).toMatchObject({
+      routeId: 'saved-a',
+      routeName: 'Rail trail loop',
+      distanceMeters: 1234,
+      elapsedSeconds: 600,
+      displayDistance: '0.77 mi',
+      displayElapsed: '10:00',
+      displayPace: '12:59 /mi',
+      finishedAt: '2026-05-08T12:00:00.000Z',
+    });
+    expect(result.library[0].history[0].routeSnapshot.name).toBe(
+      'Rail trail loop',
+    );
+  });
+
+  it('creates an unnamed route for completed Go history without an active saved route', () => {
+    const route = createRoute({
+      name: 'New route',
+      points: [
+        { id: 'a', name: 'A', lat: 43, lng: -72 },
+        { id: 'b', name: 'B', lat: 43.01, lng: -72.01 },
+      ],
+    });
+
+    const result = addRouteHistoryEntry([], route, {
+      now: '2026-05-08T12:00:00.000Z',
+      stats: {
+        distanceMeters: 1234,
+        elapsedSeconds: 0,
+        completedAt: '2026-05-08T12:00:00.000Z',
+      },
+    });
+
+    expect(result.savedRouteId).toBe(result.library[0].id);
+    expect(result.library).toHaveLength(1);
+    expect(result.library[0].name).toBe('Unnamed route');
+    expect(result.library[0].history).toHaveLength(1);
+    expect(result.library[0].history[0].routeId).toBe(result.library[0].id);
+    expect(result.library[0].history[0].routeSnapshot.name).toBe(
+      'Unnamed route',
+    );
   });
 
   it('deletes saved routes without reordering the remaining routes', () => {

@@ -16,6 +16,7 @@ import {
   updateRoute,
 } from './route-model.js';
 import {
+  addRouteHistoryEntry,
   createSavedRoute,
   deleteSavedRoute,
   getSavedRoute,
@@ -1258,6 +1259,8 @@ function createGoStatsSnapshot() {
   return {
     routeName: route.name || 'New route',
     activityType: route.activityType,
+    distanceMeters: routeDistanceMeters,
+    elapsedSeconds: 0,
     distance: formatMiles(routeDistanceMeters),
     elapsed: '0:00',
     pace: formatDisplayedPace(routeDistanceMeters),
@@ -1271,6 +1274,37 @@ function saveLastGoStats(stats) {
   } catch {
     // Ignore localStorage failures; the completion screen still shows the stats.
   }
+
+  saveGoStatsToRouteHistory(stats);
+}
+
+function saveGoStatsToRouteHistory(stats) {
+  const hadActiveSavedRoute = Boolean(activeSavedRouteId);
+  route = withCurrentRoutedGeometryState(route);
+  const result = addRouteHistoryEntry(routeLibrary, route, {
+    savedRouteId: activeSavedRouteId,
+    stats,
+    now: stats.completedAt,
+  });
+
+  routeLibrary = result.library;
+  activeSavedRouteId = result.savedRouteId;
+
+  if (activeSavedRouteId && !getSavedRoute(routeLibrary, activeSavedRouteId)) {
+    activeSavedRouteId = null;
+  }
+
+  const savedRoute = activeSavedRouteId
+    ? getSavedRoute(routeLibrary, activeSavedRouteId)
+    : null;
+  if (savedRoute && (!routeDirty || !hadActiveSavedRoute)) {
+    route = savedRouteToRoute(savedRoute);
+    routeDirty = false;
+  }
+
+  persistLibrary();
+  persistAppState();
+  renderLibrary();
 }
 
 function beginFinishHold() {
