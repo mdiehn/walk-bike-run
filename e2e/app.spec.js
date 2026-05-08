@@ -72,6 +72,7 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await expect(page.getByTestId('go-status-text')).toHaveText('Ready to save');
   await expect(page.getByTestId('go-primary-action')).toContainText('Done');
 
+  await page.waitForTimeout(550);
   await page.getByTestId('go-primary-action').click();
   await expect(page.getByTestId('go-complete-panel')).toBeVisible();
   await expect(page.getByTestId('go-complete-route-name')).toHaveText('New route');
@@ -85,6 +86,52 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await expect(page.getByTestId('go-complete-panel')).toBeHidden();
   await expect(page.getByTestId('go-primary-action')).toContainText('Start');
   await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
+});
+
+
+test('stores manual Go location override settings', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Go mode uses browser location when available.',
+  );
+
+  await page.getByTestId('go-manual-location-enabled').check();
+  await page.getByTestId('go-manual-latitude').fill('43.6426');
+  await page.getByTestId('go-manual-latitude').blur();
+  await page.getByTestId('go-manual-longitude').fill('-72.2518');
+  await page.getByTestId('go-manual-longitude').blur();
+
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Go mode uses the manual location override.',
+  );
+
+  await page.reload();
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await expect(page.getByTestId('go-manual-location-enabled')).toBeChecked();
+  await expect(page.getByTestId('go-manual-latitude')).toHaveValue('43.6426');
+  await expect(page.getByTestId('go-manual-longitude')).toHaveValue('-72.2518');
+});
+
+test('sets manual Go location by picking on the map', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByTestId('pick-go-manual-location').click();
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Tap the map to set your manual Go location.',
+  );
+
+  await page.getByTestId('map').click({ position: { x: 180, y: 180 } });
+
+  await expect(page.getByTestId('go-manual-location-enabled')).toBeChecked();
+  await expect(page.getByTestId('go-manual-latitude')).not.toHaveValue('');
+  await expect(page.getByTestId('go-manual-longitude')).not.toHaveValue('');
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Go mode uses the manual location override.',
+  );
+  await expect(page.getByTestId('point-row')).toHaveCount(0);
 });
 
 test('updates route stats when activity changes', async ({ page }) => {

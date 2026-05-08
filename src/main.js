@@ -58,6 +58,8 @@ const GO_RECENTER_VIEW_BY_ACTIVITY = {
   bike: { zoom: 15, aheadMeters: 180 },
 };
 const GO_POSITION_HEADING_MIN_MOVE_METERS = 3;
+const GO_LOCATION_SETTINGS_STORAGE_KEY = 'walkBikeRun.goLocationSettings';
+
 
 let routeLibrary = loadRouteLibrary();
 const persistedAppState = loadAppState();
@@ -69,6 +71,7 @@ let activeRouteModeTab = normalizeRouteModeTab(
   persistedAppState.activeRouteModeTab,
 );
 let goSessionStatus = 'ready';
+let pickingManualGoLocation = false;
 let finishHoldTimer = null;
 let suppressGoPrimaryClickUntil = 0;
 let lastGoStats = null;
@@ -102,6 +105,7 @@ let goPositionWatchId = null;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
 let routingSettings = loadRoutingSettings();
+let goLocationSettings = loadGoLocationSettings();
 let undoStack = [];
 let redoStack = [];
 
@@ -206,7 +210,7 @@ app.innerHTML = `
                 <span id="goProgressBar" class="go-progress-bar"></span>
               </div>
             </div>
-            <div id="goActivePanel" class="go-active-panel">
+            <div id="goActivePanel" class="go-active-panel" data-testid="go-active-panel">
               <div class="go-control-grid" aria-label="Go controls">
                 <button id="goPrimaryAction" type="button" class="go-primary-control go-primary-start" data-testid="go-primary-action">
                   <span id="goPrimaryLabel">Start</span>
@@ -327,6 +331,28 @@ app.innerHTML = `
               <input id="orsBaseUrl" type="url" autocomplete="off" placeholder="https://example.workers.dev" data-testid="ors-base-url" />
             </label>
             <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until a Worker URL is set.</p>
+            </div>
+            <div class="settings-group go-location-settings" aria-label="Go location settings">
+              <h4>Go location</h4>
+              <label class="checkbox-row">
+                <input id="goManualLocationEnabled" type="checkbox" data-testid="go-manual-location-enabled" />
+                Use manual location override
+              </label>
+              <div class="route-field-grid manual-location-grid">
+                <label class="field-row compact-field">
+                  <span>Latitude</span>
+                  <input id="goManualLatitude" type="number" step="any" inputmode="decimal" autocomplete="off" placeholder="43.6426" data-testid="go-manual-latitude" />
+                </label>
+                <label class="field-row compact-field">
+                  <span>Longitude</span>
+                  <input id="goManualLongitude" type="number" step="any" inputmode="decimal" autocomplete="off" placeholder="-72.2518" data-testid="go-manual-longitude" />
+                </label>
+              </div>
+              <div class="button-row go-location-pick-row">
+                <button id="pickGoManualLocation" type="button" class="secondary" data-testid="pick-go-manual-location">Pick on map</button>
+                <button id="cancelGoManualLocationPick" type="button" class="secondary" data-testid="cancel-go-manual-location-pick" hidden>Cancel pick</button>
+              </div>
+              <p id="goLocationStatus" class="hint-text" data-testid="go-location-status">Go mode uses browser location when available.</p>
             </div>
             <div class="settings-group cloud-storage-panel" aria-label="Google Drive library backup">
               <h4>Google Drive backup</h4>
@@ -455,6 +481,12 @@ const elements = {
   ),
   libraryBackupControls: document.querySelector('#libraryBackupControls'),
   backupStatus: document.querySelector('#backupStatus'),
+  goManualLocationEnabled: document.querySelector('#goManualLocationEnabled'),
+  goManualLatitude: document.querySelector('#goManualLatitude'),
+  goManualLongitude: document.querySelector('#goManualLongitude'),
+  pickGoManualLocation: document.querySelector('#pickGoManualLocation'),
+  cancelGoManualLocationPick: document.querySelector('#cancelGoManualLocationPick'),
+  goLocationStatus: document.querySelector('#goLocationStatus'),
   googleClientId: document.querySelector('#googleClientId'),
   connectGoogleDrive: document.querySelector('#connectGoogleDrive'),
   disconnectGoogleDrive: document.querySelector('#disconnectGoogleDrive'),
@@ -525,6 +557,11 @@ function initMap() {
   goPositionLayer = L.layerGroup().addTo(map);
 
   map.on('click', (event) => {
+    if (pickingManualGoLocation) {
+      setManualGoLocationFromMap(event.latlng);
+      return;
+    }
+
     if (pointTouchMode !== 'add') return;
 
     addRoutePoint(
@@ -650,6 +687,7 @@ function renderRoute() {
   renderPointTouchMode();
   renderGoMode();
   renderRoutingSettings();
+  renderGoLocationSettings();
   renderCloudSettings();
   renderBackupPanel();
   persistAppState();
@@ -670,6 +708,40 @@ function renderRoutingSettings() {
   }
 
   elements.routingStatus.textContent = getRoutingStatusText();
+}
+
+function renderGoLocationSettings() {
+  elements.goManualLocationEnabled.checked = goLocationSettings.enabled;
+
+  if (document.activeElement !== elements.goManualLatitude) {
+    elements.goManualLatitude.value = goLocationSettings.latitude ?? '';
+  }
+
+  if (document.activeElement !== elements.goManualLongitude) {
+    elements.goManualLongitude.value = goLocationSettings.longitude ?? '';
+  }
+
+  elements.goManualLatitude.disabled = !goLocationSettings.enabled;
+  elements.goManualLongitude.disabled = !goLocationSettings.enabled;
+  elements.pickGoManualLocation.hidden = pickingManualGoLocation;
+  elements.cancelGoManualLocationPick.hidden = !pickingManualGoLocation;
+  elements.goLocationStatus.textContent = getGoLocationStatusText();
+}
+
+function getGoLocationStatusText() {
+  if (pickingManualGoLocation) {
+    return 'Tap the map to set your manual Go location.';
+  }
+
+  if (!goLocationSettings.enabled) {
+    return 'Go mode uses browser location when available.';
+  }
+
+  if (getManualGoLocationLatLng()) {
+    return 'Go mode uses the manual location override.';
+  }
+
+  return 'Enter a valid latitude and longitude to use the manual override.';
 }
 
 function renderCloudSettings() {
@@ -1326,7 +1398,7 @@ function saveGoStatsToRouteHistory(stats) {
 
   persistLibrary();
   persistAppState();
-  renderLibrary();
+  renderLibraryList();
 }
 
 function beginFinishHold() {
@@ -1368,6 +1440,10 @@ function getGoRecenterLatLng(latLng, view) {
 }
 
 function getGoRecenterBearingDegrees(latLng) {
+  if (getManualGoLocationLatLng()) {
+    return getRouteAheadBearingDegrees(latLng);
+  }
+
   if (Number.isFinite(goPositionHeadingDegrees)) {
     return goPositionHeadingDegrees;
   }
@@ -1432,6 +1508,7 @@ function destinationLatLng(origin, bearingDegrees, offsetMeters) {
 function startGoPositionWatch() {
   renderGoPositionMarker();
 
+  if (getManualGoLocationLatLng()) return;
   if (goPositionWatchId !== null) return;
   if (!navigator.geolocation) return;
 
@@ -1520,7 +1597,19 @@ function clearGoPositionMarker() {
 }
 
 function getGoPositionLatLng() {
+  const manualLatLng = getManualGoLocationLatLng();
+  if (manualLatLng) return manualLatLng;
+
+  const firstRoutePointLatLng = getFirstRoutePointLatLng();
+  if (goSessionStatus === 'ready') {
+    return firstRoutePointLatLng;
+  }
+
   if (goPositionLatLng) return goPositionLatLng;
+  return firstRoutePointLatLng;
+}
+
+function getFirstRoutePointLatLng() {
   if (route.points.length === 0) return null;
 
   const firstPoint = route.points[0];
@@ -2011,6 +2100,92 @@ function saveRoutingSettings(storage = globalThis.localStorage) {
   storage?.removeItem('walkBikeRun.orsApiKey');
 }
 
+function loadGoLocationSettings(storage = globalThis.localStorage) {
+  try {
+    const rawSettings = storage?.getItem(GO_LOCATION_SETTINGS_STORAGE_KEY);
+    if (!rawSettings) {
+      return { enabled: false, latitude: '', longitude: '' };
+    }
+
+    const parsedSettings = JSON.parse(rawSettings);
+    return {
+      enabled: Boolean(parsedSettings.enabled),
+      latitude:
+        typeof parsedSettings.latitude === 'string'
+          ? parsedSettings.latitude
+          : '',
+      longitude:
+        typeof parsedSettings.longitude === 'string'
+          ? parsedSettings.longitude
+          : '',
+    };
+  } catch {
+    return { enabled: false, latitude: '', longitude: '' };
+  }
+}
+
+function saveGoLocationSettings(storage = globalThis.localStorage) {
+  storage?.setItem(
+    GO_LOCATION_SETTINGS_STORAGE_KEY,
+    JSON.stringify(goLocationSettings),
+  );
+}
+
+function updateGoLocationSettings(nextSettings) {
+  goLocationSettings = {
+    ...goLocationSettings,
+    ...nextSettings,
+  };
+  saveGoLocationSettings();
+  renderGoLocationSettings();
+
+  if (getManualGoLocationLatLng()) {
+    goPositionHeadingDegrees = null;
+    stopGoPositionWatch();
+  }
+
+  if (activeRouteModeTab === 'go') {
+    startGoPositionWatch();
+    renderGoPositionMarker();
+  }
+}
+
+function startManualGoLocationPick() {
+  pickingManualGoLocation = true;
+  setPointTouchMode('idle');
+  renderGoLocationSettings();
+  elements.mapStatus.textContent = 'Tap the map to set your manual Go location.';
+}
+
+function cancelManualGoLocationPick() {
+  pickingManualGoLocation = false;
+  renderGoLocationSettings();
+  elements.mapStatus.textContent = 'Manual Go location pick canceled.';
+}
+
+function setManualGoLocationFromMap(latlng) {
+  pickingManualGoLocation = false;
+  updateGoLocationSettings({
+    enabled: true,
+    latitude: latlng.lat.toFixed(6),
+    longitude: latlng.lng.toFixed(6),
+  });
+  elements.mapStatus.textContent = 'Manual Go location set from map.';
+}
+
+function getManualGoLocationLatLng() {
+  if (!goLocationSettings.enabled) return null;
+
+  const latitude = Number(goLocationSettings.latitude);
+  const longitude = Number(goLocationSettings.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (latitude < -90 || latitude > 90) return null;
+  if (longitude < -180 || longitude > 180) return null;
+
+  return L.latLng(latitude, longitude);
+}
+
 async function recalculateRoute() {
   if (route.points.length < 2 || routePlan.status === 'pending') return;
 
@@ -2486,6 +2661,24 @@ elements.orsBaseUrl.addEventListener('change', (event) => {
   routePlan = createEmptyRoutePlan();
   renderRoute();
 });
+
+elements.goManualLocationEnabled.addEventListener('change', (event) => {
+  updateGoLocationSettings({ enabled: event.target.checked });
+});
+
+elements.goManualLatitude.addEventListener('change', (event) => {
+  updateGoLocationSettings({ latitude: event.target.value.trim() });
+});
+
+elements.goManualLongitude.addEventListener('change', (event) => {
+  updateGoLocationSettings({ longitude: event.target.value.trim() });
+});
+
+elements.pickGoManualLocation.addEventListener('click', startManualGoLocationPick);
+elements.cancelGoManualLocationPick.addEventListener(
+  'click',
+  cancelManualGoLocationPick,
+);
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
 elements.replotRoute.addEventListener('click', recalculateRoute);
