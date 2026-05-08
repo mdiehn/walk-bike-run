@@ -52,6 +52,12 @@ const INITIAL_CENTER = [43.6426, -72.2518];
 const INITIAL_ZOOM = 13;
 const APP_STATE_STORAGE_KEY = 'walkBikeRun.appState';
 const ROUTE_HISTORY_LIMIT = 50;
+const GO_RECENTER_VIEW_BY_ACTIVITY = {
+  walk: { zoom: 17, aheadMeters: 45 },
+  run: { zoom: 16, aheadMeters: 85 },
+  bike: { zoom: 15, aheadMeters: 180 },
+};
+const GO_POSITION_HEADING_MIN_MOVE_METERS = 3;
 
 let routeLibrary = loadRouteLibrary();
 const persistedAppState = loadAppState();
@@ -91,6 +97,7 @@ let mileMarkerLayer;
 let goPositionLayer;
 let goPositionMarker = null;
 let goPositionLatLng = null;
+let goPositionHeadingDegrees = null;
 let goPositionWatchId = null;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
@@ -1336,12 +1343,90 @@ function clearFinishHoldTimer() {
 }
 
 function recenterGoRoute() {
-  if (goPositionLatLng) {
-    map.setView(goPositionLatLng, Math.max(map.getZoom(), 16));
+  const latLng = getGoPositionLatLng();
+  if (!latLng) {
+    fitRouteToMap();
     return;
   }
 
-  fitRouteToMap();
+  const view = getGoRecenterView();
+  map.setView(getGoRecenterLatLng(latLng, view), view.zoom);
+}
+
+function getGoRecenterView() {
+  return (
+    GO_RECENTER_VIEW_BY_ACTIVITY[route.activityType] ??
+    GO_RECENTER_VIEW_BY_ACTIVITY.walk
+  );
+}
+
+function getGoRecenterLatLng(latLng, view) {
+  const bearingDegrees = getGoRecenterBearingDegrees(latLng);
+  if (bearingDegrees === null) return latLng;
+
+  return destinationLatLng(latLng, bearingDegrees, view.aheadMeters);
+}
+
+function getGoRecenterBearingDegrees(latLng) {
+  if (Number.isFinite(goPositionHeadingDegrees)) {
+    return goPositionHeadingDegrees;
+  }
+
+  return getRouteAheadBearingDegrees(latLng);
+}
+
+function getRouteAheadBearingDegrees(latLng) {
+  const coordinates = getDisplayedRouteCoordinates();
+  if (coordinates.length < 2) return null;
+
+  let closestIndex = 0;
+  let closestDistance = Infinity;
+
+  coordinates.forEach((coordinate, index) => {
+    const coordinateLatLng = { lat: coordinate[0], lng: coordinate[1] };
+    const distance = distanceMeters(latLng, coordinateLatLng);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+
+  for (let index = closestIndex + 1; index < coordinates.length; index += 1) {
+    const next = { lat: coordinates[index][0], lng: coordinates[index][1] };
+    if (distanceMeters(latLng, next) >= GO_POSITION_HEADING_MIN_MOVE_METERS) {
+      return getBearingDegrees(latLng, next);
+    }
+  }
+
+  if (!route.loop || coordinates.length < 2) return null;
+
+  const first = { lat: coordinates[0][0], lng: coordinates[0][1] };
+  if (distanceMeters(latLng, first) >= GO_POSITION_HEADING_MIN_MOVE_METERS) {
+    return getBearingDegrees(latLng, first);
+  }
+
+  return null;
+}
+
+function destinationLatLng(origin, bearingDegrees, offsetMeters) {
+  const earthRadiusMeters = 6_371_000;
+  const angularDistance = offsetMeters / earthRadiusMeters;
+  const bearing = toRadians(bearingDegrees);
+  const originLat = toRadians(origin.lat);
+  const originLng = toRadians(origin.lng);
+
+  const destinationLat = Math.asin(
+    Math.sin(originLat) * Math.cos(angularDistance) +
+      Math.cos(originLat) * Math.sin(angularDistance) * Math.cos(bearing),
+  );
+  const destinationLng =
+    originLng +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(originLat),
+      Math.cos(angularDistance) - Math.sin(originLat) * Math.sin(destinationLat),
+    );
+
+  return L.latLng(toDegrees(destinationLat), toDegrees(destinationLng));
 }
 
 function startGoPositionWatch() {
@@ -1352,10 +1437,17 @@ function startGoPositionWatch() {
 
   goPositionWatchId = navigator.geolocation.watchPosition(
     (position) => {
-      goPositionLatLng = L.latLng(
+      const nextLatLng = L.latLng(
         position.coords.latitude,
         position.coords.longitude,
       );
+      const nextHeadingDegrees = getGoPositionHeadingDegrees(position, nextLatLng);
+
+      goPositionLatLng = nextLatLng;
+      if (nextHeadingDegrees !== null) {
+        goPositionHeadingDegrees = nextHeadingDegrees;
+      }
+
       renderGoPositionMarker();
     },
     () => {
@@ -1369,12 +1461,30 @@ function startGoPositionWatch() {
   );
 }
 
+function getGoPositionHeadingDegrees(position, nextLatLng) {
+  const reportedHeading = position.coords.heading;
+  if (Number.isFinite(reportedHeading) && reportedHeading >= 0) {
+    return reportedHeading;
+  }
+
+  if (!goPositionLatLng) return null;
+  if (
+    distanceMeters(goPositionLatLng, nextLatLng) <
+    GO_POSITION_HEADING_MIN_MOVE_METERS
+  ) {
+    return null;
+  }
+
+  return getBearingDegrees(goPositionLatLng, nextLatLng);
+}
+
 function stopGoPositionWatch() {
   if (goPositionWatchId !== null && navigator.geolocation) {
     navigator.geolocation.clearWatch(goPositionWatchId);
   }
 
   goPositionWatchId = null;
+  goPositionHeadingDegrees = null;
   clearGoPositionMarker();
 }
 
