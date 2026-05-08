@@ -12,9 +12,9 @@ test('loads the route editor shell', async ({ page }) => {
   await expect(page.getByTestId('distance-text')).toHaveText('0.00 mi');
   await expect(page.getByTestId('estimated-time')).toHaveText('0m');
   await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
-  await expect(page.getByRole('button', { name: 'Go' })).toBeVisible();
+  await expect(page.getByTestId('enter-go-mode')).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
-  await page.getByRole('button', { name: 'Go' }).click();
+  await page.getByTestId('enter-go-mode').click();
   await expect(page.getByTestId('go-status-text')).toHaveText(
     'Plan a route first',
   );
@@ -33,8 +33,9 @@ test('shows first-pass Go mode controls and route-use stats', async ({
 
   await addPointAtMap(page);
   await addPointAtMap(page);
-  await page.getByRole('button', { name: 'Go' }).click();
+  await page.getByTestId('enter-go-mode').click();
 
+  await expect(page.getByTestId('go-primary-action')).toBeFocused();
   await expect(page.getByTestId('go-route-name')).toHaveText('New route');
   await expect(page.getByTestId('go-distance-text')).not.toHaveText('0.00 mi');
   await expect(page.getByTestId('go-elapsed-text')).toHaveText('0:00');
@@ -78,6 +79,12 @@ test('shows first-pass Go mode controls and route-use stats', async ({
 
   await page.getByRole('button', { name: 'Plan' }).click();
   await expect(page.getByTestId('undo-route-button')).toBeEnabled();
+
+  await page.getByTestId('enter-go-mode').click();
+  await expect(page.getByTestId('go-active-panel')).toBeVisible();
+  await expect(page.getByTestId('go-complete-panel')).toBeHidden();
+  await expect(page.getByTestId('go-primary-action')).toContainText('Start');
+  await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
 });
 
 test('updates route stats when activity changes', async ({ page }) => {

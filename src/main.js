@@ -116,7 +116,7 @@ app.innerHTML = `
           <div id="planModePanel" class="route-mode-panel" aria-label="Plan mode">
             <div class="plan-mode-header">
               <span class="eyebrow plan-mode-eyebrow">Plan mode</span>
-              <button id="enterGoMode" class="secondary mode-toggle-button" type="button">Go</button>
+              <button id="enterGoMode" class="secondary mode-toggle-button" type="button" data-testid="enter-go-mode">Go</button>
             </div>
             <div class="route-field-grid">
               <label class="field-row route-name-field">
@@ -1107,8 +1107,12 @@ function normalizeRouteModeTab(tabName) {
   return 'plan';
 }
 
-function setActiveRouteModeTab(tabName) {
+function setActiveRouteModeTab(tabName, options = {}) {
   activeRouteModeTab = normalizeRouteModeTab(tabName);
+
+  if (activeRouteModeTab === 'go' && options.rearmSession) {
+    rearmGoSession();
+  }
 
   const showPlan = activeRouteModeTab === 'plan';
   const showGo = activeRouteModeTab === 'go';
@@ -1118,6 +1122,26 @@ function setActiveRouteModeTab(tabName) {
 
   renderGoMode();
   persistAppState();
+
+  if (showGo && options.focusPrimaryAction) {
+    focusGoPrimaryAction();
+  }
+}
+
+
+function rearmGoSession() {
+  if (goSessionStatus === 'complete' || goSessionStatus === 'done') {
+    goSessionStatus = 'ready';
+  }
+  finishHoldCompleted = false;
+  clearFinishHoldTimer();
+}
+
+function focusGoPrimaryAction() {
+  window.requestAnimationFrame(() => {
+    elements.goPrimaryAction.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    elements.goPrimaryAction.focus({ preventScroll: true });
+  });
 }
 
 function renderGoMode() {
@@ -2225,7 +2249,9 @@ elements.loopToggle.addEventListener('change', (event) => {
 });
 
 elements.saveRoute.addEventListener('click', () => saveCurrentRoute());
-elements.enterGoMode.addEventListener('click', () => setActiveRouteModeTab('go'));
+elements.enterGoMode.addEventListener('click', () =>
+  setActiveRouteModeTab('go', { focusPrimaryAction: true, rearmSession: true }),
+);
 elements.exitGoMode.addEventListener('click', () =>
   setActiveRouteModeTab('plan'),
 );
