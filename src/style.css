@@ -590,8 +590,10 @@ select:focus {
 }
 
 .go-primary-control {
+  flex-direction: column;
   grid-column: 1 / -1;
   font-size: 1.18rem;
+  gap: 0.12rem;
   min-height: 4.2rem;
 }
 
