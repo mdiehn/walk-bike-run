@@ -644,6 +644,10 @@ select:focus {
   opacity: 0.86;
 }
 
+.go-primary-hint[hidden] {
+  display: none;
+}
+
 .go-mode-note {
   margin-top: 0.55rem;
 }
