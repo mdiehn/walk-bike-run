@@ -1331,3 +1331,39 @@ select:focus {
     min-height: 3.6rem;
   }
 }
+
+.go-position-marker-shell {
+  background: transparent;
+  border: 0;
+}
+
+.go-position-marker {
+  align-items: center;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 24%);
+  color: #ffffff;
+  display: flex;
+  font-size: 1.3rem;
+  height: 38px;
+  justify-content: center;
+  line-height: 1;
+  width: 38px;
+}
+
+.go-position-icon {
+  display: block;
+  transform: translateY(-1px);
+}
+
+.go-position-moving .go-position-marker {
+  background: var(--wbr-success);
+}
+
+.go-position-paused .go-position-marker {
+  background: var(--wbr-warning);
+}
+
+.go-position-stopped .go-position-marker {
+  background: var(--wbr-primary);
+}

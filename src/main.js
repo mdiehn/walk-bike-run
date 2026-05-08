@@ -88,6 +88,10 @@ let map;
 let pointLayer;
 let lineLayer;
 let mileMarkerLayer;
+let goPositionLayer;
+let goPositionMarker = null;
+let goPositionLatLng = null;
+let goPositionWatchId = null;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
 let routingSettings = loadRoutingSettings();
@@ -511,6 +515,7 @@ function initMap() {
   lineLayer = L.layerGroup().addTo(map);
   mileMarkerLayer = L.layerGroup().addTo(map);
   pointLayer = L.layerGroup().addTo(map);
+  goPositionLayer = L.layerGroup().addTo(map);
 
   map.on('click', (event) => {
     if (pointTouchMode !== 'add') return;
@@ -1121,6 +1126,12 @@ function setActiveRouteModeTab(tabName, options = {}) {
   elements.planModePanel.hidden = !showPlan;
   elements.goModePanel.hidden = !showGo;
 
+  if (showGo) {
+    startGoPositionWatch();
+  } else {
+    stopGoPositionWatch();
+  }
+
   renderGoMode();
   persistAppState();
 
@@ -1157,6 +1168,7 @@ function renderGoMode() {
   elements.goProgressText.textContent = goSessionStatus === 'complete' ? '100%' : '0%';
   elements.goProgressBar.style.width = goSessionStatus === 'complete' ? '100%' : '0%';
   elements.goStatusText.textContent = getGoStatusText();
+  renderGoPositionMarker();
 
   const hasRoute = route.points.length > 0;
   const showCompletePanel = goSessionStatus === 'complete';
@@ -1324,7 +1336,114 @@ function clearFinishHoldTimer() {
 }
 
 function recenterGoRoute() {
+  if (goPositionLatLng) {
+    map.setView(goPositionLatLng, Math.max(map.getZoom(), 16));
+    return;
+  }
+
   fitRouteToMap();
+}
+
+function startGoPositionWatch() {
+  renderGoPositionMarker();
+
+  if (goPositionWatchId !== null) return;
+  if (!navigator.geolocation) return;
+
+  goPositionWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      goPositionLatLng = L.latLng(
+        position.coords.latitude,
+        position.coords.longitude,
+      );
+      renderGoPositionMarker();
+    },
+    () => {
+      renderGoPositionMarker();
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 10000,
+    },
+  );
+}
+
+function stopGoPositionWatch() {
+  if (goPositionWatchId !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(goPositionWatchId);
+  }
+
+  goPositionWatchId = null;
+  clearGoPositionMarker();
+}
+
+function renderGoPositionMarker() {
+  if (!goPositionLayer || activeRouteModeTab !== 'go') return;
+
+  const latLng = getGoPositionLatLng();
+  if (!latLng) {
+    clearGoPositionMarker();
+    return;
+  }
+
+  const icon = createGoPositionIcon();
+
+  if (!goPositionMarker) {
+    goPositionMarker = L.marker(latLng, {
+      interactive: false,
+      icon,
+      zIndexOffset: 1000,
+    }).addTo(goPositionLayer);
+    return;
+  }
+
+  goPositionMarker.setLatLng(latLng);
+  goPositionMarker.setIcon(icon);
+}
+
+function clearGoPositionMarker() {
+  if (!goPositionMarker) return;
+
+  goPositionLayer.removeLayer(goPositionMarker);
+  goPositionMarker = null;
+}
+
+function getGoPositionLatLng() {
+  if (goPositionLatLng) return goPositionLatLng;
+  if (route.points.length === 0) return null;
+
+  const firstPoint = route.points[0];
+  return L.latLng(firstPoint.lat, firstPoint.lng);
+}
+
+function createGoPositionIcon() {
+  const stateClass = getGoPositionStateClass();
+  const activityClass = `go-position-${route.activityType}`;
+  const label = getGoPositionActivityLabel();
+
+  return L.divIcon({
+    className: `go-position-marker-shell ${stateClass} ${activityClass}`,
+    html: `
+      <div class="go-position-marker" aria-hidden="true">
+        <span class="go-position-icon">${label}</span>
+      </div>
+    `,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+  });
+}
+
+function getGoPositionStateClass() {
+  if (goSessionStatus === 'running') return 'go-position-moving';
+  if (goSessionStatus === 'paused') return 'go-position-paused';
+  return 'go-position-stopped';
+}
+
+function getGoPositionActivityLabel() {
+  if (route.activityType === 'bike') return '🚲';
+  if (route.activityType === 'run') return '🏃';
+  return '🚶';
 }
 
 function normalizeRouteTab(tabName) {
