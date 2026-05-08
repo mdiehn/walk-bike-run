@@ -64,7 +64,7 @@ let activeRouteModeTab = normalizeRouteModeTab(
 );
 let goSessionStatus = 'ready';
 let finishHoldTimer = null;
-let finishHoldCompleted = false;
+let suppressGoPrimaryClickUntil = 0;
 let lastGoStats = null;
 let pointTouchMode = normalizePointTouchMode(persistedAppState.pointTouchMode);
 let librarySortBy = 'saved';
@@ -1134,7 +1134,7 @@ function rearmGoSession() {
   if (goSessionStatus === 'complete' || goSessionStatus === 'done') {
     goSessionStatus = 'ready';
   }
-  finishHoldCompleted = false;
+  suppressGoPrimaryClickUntil = 0;
   clearFinishHoldTimer();
 }
 
@@ -1201,8 +1201,7 @@ function getGoStatusText() {
 }
 
 function handleGoPrimaryAction() {
-  if (finishHoldCompleted) {
-    finishHoldCompleted = false;
+  if (Date.now() < suppressGoPrimaryClickUntil) {
     return;
   }
   if (route.points.length === 0) return;
@@ -1235,15 +1234,15 @@ function pauseGoSession() {
 function markGoSessionDone() {
   if (goSessionStatus !== 'paused') return;
   goSessionStatus = 'done';
-  finishHoldCompleted = true;
+  suppressGoPrimaryClickUntil = Date.now() + 500;
   renderGoMode();
 }
 
 function completeGoSession() {
   lastGoStats = createGoStatsSnapshot();
-  saveLastGoStats(lastGoStats);
   goSessionStatus = 'complete';
   renderGoMode();
+  saveLastGoStats(lastGoStats);
 }
 
 function renderGoCompleteStats() {
@@ -1275,7 +1274,11 @@ function saveLastGoStats(stats) {
     // Ignore localStorage failures; the completion screen still shows the stats.
   }
 
-  saveGoStatsToRouteHistory(stats);
+  try {
+    saveGoStatsToRouteHistory(stats);
+  } catch {
+    // Ignore history-save failures; the completion screen still shows the stats.
+  }
 }
 
 function saveGoStatsToRouteHistory(stats) {
@@ -1309,7 +1312,7 @@ function saveGoStatsToRouteHistory(stats) {
 
 function beginFinishHold() {
   if (goSessionStatus !== 'paused') return;
-  finishHoldCompleted = false;
+  suppressGoPrimaryClickUntil = 0;
   clearFinishHoldTimer();
   finishHoldTimer = window.setTimeout(markGoSessionDone, 900);
 }
