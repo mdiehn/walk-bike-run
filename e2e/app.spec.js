@@ -107,9 +107,9 @@ test('locks route editing in Go mode and restores it in Plan mode', async ({
   await addPointAtMap(page);
   await expect(page.getByTestId('point-row')).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Del' }).click();
+  await page.getByRole('button', { name: 'Del', exact: true }).click();
   await page.getByTestId('enter-go-mode').click();
-  await expect(page.getByRole('button', { name: 'Del' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Del', exact: true })).toBeHidden();
 
   await addPointAtMap(page);
   await expect(page.getByTestId('point-row')).toHaveCount(1);
@@ -138,7 +138,7 @@ test('locks route editing in Go mode and restores it in Plan mode', async ({
   await expect(page.getByLabel('Delete point 1')).toBeDisabled();
 
   await page.getByRole('button', { name: 'Plan' }).click();
-  await expect(page.getByRole('button', { name: 'Del' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Del', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Add' }).click();
   await addPointAtMap(page);
   await expect(page.getByTestId('point-row')).toHaveCount(2);
@@ -187,6 +187,48 @@ test('sets manual Go location by picking on the map', async ({ page }) => {
     'Go mode uses the manual location override.',
   );
   await expect(page.getByTestId('point-row')).toHaveCount(0);
+});
+
+test('uses the first route point when manual Go location is enabled but blank', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'walkBikeRun.goLocationSettings',
+      JSON.stringify({ enabled: true, latitude: '', longitude: '' }),
+    );
+  });
+  await page.goto('/');
+
+  await addPointAtMap(page);
+  await addPointAtMap(page);
+
+  await page.getByTestId('enter-go-mode').click();
+
+  const firstRouteMarkerBox = await page
+    .getByTestId('route-marker')
+    .first()
+    .boundingBox();
+  const goPositionMarkerBox = await page
+    .getByTestId('go-position-marker')
+    .boundingBox();
+  expect(firstRouteMarkerBox).not.toBeNull();
+  expect(goPositionMarkerBox).not.toBeNull();
+  const firstRouteMarkerCenter = {
+    x: firstRouteMarkerBox.x + firstRouteMarkerBox.width / 2,
+    y: firstRouteMarkerBox.y + firstRouteMarkerBox.height / 2,
+  };
+  const goPositionMarkerCenter = {
+    x: goPositionMarkerBox.x + goPositionMarkerBox.width / 2,
+    y: goPositionMarkerBox.y + goPositionMarkerBox.height / 2,
+  };
+
+  expect(
+    Math.abs(goPositionMarkerCenter.x - firstRouteMarkerCenter.x),
+  ).toBeLessThan(16);
+  expect(
+    Math.abs(goPositionMarkerCenter.y - firstRouteMarkerCenter.y),
+  ).toBeLessThan(16);
 });
 
 test('updates route stats when activity changes', async ({ page }) => {
