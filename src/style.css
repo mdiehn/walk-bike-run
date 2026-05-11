@@ -454,7 +454,7 @@ select:focus {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
- .plan-mode-header {
+.plan-mode-header {
   align-items: center;
   display: flex;
   gap: 0.6rem;
@@ -1244,6 +1244,68 @@ select:focus {
 
   .panel {
     max-height: none;
+  }
+}
+
+@media (max-width: 850px) {
+  body.is-go-mode {
+    overflow: hidden;
+  }
+
+  body.is-go-mode .app-shell {
+    height: 100dvh;
+    padding: 0;
+  }
+
+  body.is-go-mode .app-header {
+    display: none;
+  }
+
+  body.is-go-mode .app-main {
+    display: block;
+    height: 100dvh;
+    position: relative;
+  }
+
+  body.is-go-mode .map-card {
+    border: 0;
+    border-radius: 0;
+    inset: 0;
+    min-height: 100dvh;
+    position: absolute;
+  }
+
+  body.is-go-mode .map {
+    min-height: 100dvh;
+  }
+
+  body.is-go-mode .panel {
+    background: transparent;
+    border: 0;
+    bottom: 0;
+    box-shadow: none;
+    left: 0;
+    max-height: 48vh;
+    overflow: auto;
+    padding: 0.55rem;
+    position: fixed;
+    right: 0;
+    z-index: 1000;
+  }
+
+  body.is-go-mode .route-summary-section {
+    border: 0;
+    padding: 0;
+  }
+
+  body.is-go-mode .route-workspace,
+  body.is-go-mode .backup-section {
+    display: none;
+  }
+
+  body.is-go-mode .go-mode-panel {
+    border-radius: 1rem 1rem 0 0;
+    box-shadow: 0 -0.4rem 1.4rem rgb(15 23 42 / 0.2);
   }
 }
 

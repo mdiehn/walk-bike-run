@@ -43,17 +43,24 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await expect(page.getByTestId('go-primary-action')).toBeEnabled();
   await expect(page.getByTestId('go-primary-action')).toContainText('Start');
   await expect(page.getByTestId('go-recenter-button')).toBeEnabled();
+  await expect(page.getByTestId('go-position-marker')).toBeVisible();
 
   await page.getByTestId('go-primary-action').click();
   await expect(page.getByTestId('go-status-text')).toHaveText(
     'Moving placeholder',
   );
   await expect(page.getByTestId('go-primary-action')).toContainText('Pause');
+  await expect(page.getByTestId('go-position-marker')).toBeVisible();
+  await expect(page.getByTestId('go-elapsed-text')).not.toHaveText('0:00', {
+    timeout: 2500,
+  });
 
   await page.getByTestId('go-primary-action').click();
   await expect(page.getByTestId('go-status-text')).toHaveText('Paused');
   await expect(page.getByTestId('go-primary-action')).toContainText('Resume');
-  await expect(page.getByTestId('go-primary-action')).toContainText('Hold to Finish');
+  await expect(page.getByTestId('go-primary-action')).toContainText(
+    'Hold to Finish',
+  );
 
   await page.getByTestId('go-primary-action').click();
   await expect(page.getByTestId('go-status-text')).toHaveText(
@@ -75,8 +82,12 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await page.waitForTimeout(550);
   await page.getByTestId('go-primary-action').click();
   await expect(page.getByTestId('go-complete-panel')).toBeVisible();
-  await expect(page.getByTestId('go-complete-route-name')).toHaveText('New route');
-  await expect(page.getByTestId('go-complete-distance')).not.toHaveText('0.00 mi');
+  await expect(page.getByTestId('go-complete-route-name')).toHaveText(
+    'New route',
+  );
+  await expect(page.getByTestId('go-complete-distance')).not.toHaveText(
+    '0.00 mi',
+  );
 
   await page.getByRole('button', { name: 'Plan' }).click();
   await expect(page.getByTestId('undo-route-button')).toBeEnabled();
@@ -88,6 +99,50 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
 });
 
+test('locks route editing in Go mode and restores it in Plan mode', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await addPointAtMap(page);
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'Del' }).click();
+  await page.getByTestId('enter-go-mode').click();
+  await expect(page.getByRole('button', { name: 'Del' })).toBeDisabled();
+
+  await addPointAtMap(page);
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+
+  await page.getByTestId('route-marker').first().click();
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+
+  const markerBox = await page
+    .getByTestId('route-marker')
+    .first()
+    .boundingBox();
+  expect(markerBox).not.toBeNull();
+  await page.mouse.move(
+    markerBox.x + markerBox.width / 2,
+    markerBox.y + markerBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    markerBox.x + markerBox.width / 2 + 80,
+    markerBox.y + markerBox.height / 2 + 50,
+  );
+  await page.mouse.up();
+  await expect(page.getByTestId('point-row')).toHaveCount(1);
+
+  await expect(page.getByLabel('Point 1 name')).toBeDisabled();
+  await expect(page.getByLabel('Delete point 1')).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.getByRole('button', { name: 'Del' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Add' }).click();
+  await addPointAtMap(page);
+  await expect(page.getByTestId('point-row')).toHaveCount(2);
+});
 
 test('stores manual Go location override settings', async ({ page }) => {
   await page.goto('/');

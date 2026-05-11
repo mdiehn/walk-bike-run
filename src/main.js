@@ -60,7 +60,6 @@ const GO_RECENTER_VIEW_BY_ACTIVITY = {
 const GO_POSITION_HEADING_MIN_MOVE_METERS = 3;
 const GO_LOCATION_SETTINGS_STORAGE_KEY = 'walkBikeRun.goLocationSettings';
 
-
 let routeLibrary = loadRouteLibrary();
 const persistedAppState = loadAppState();
 let route =
@@ -71,6 +70,9 @@ let activeRouteModeTab = normalizeRouteModeTab(
   persistedAppState.activeRouteModeTab,
 );
 let goSessionStatus = 'ready';
+let goSessionStartedAt = null;
+let goAccumulatedElapsedSeconds = 0;
+let goElapsedTimerId = null;
 let pickingManualGoLocation = false;
 let finishHoldTimer = null;
 let suppressGoPrimaryClickUntil = 0;
@@ -485,7 +487,9 @@ const elements = {
   goManualLatitude: document.querySelector('#goManualLatitude'),
   goManualLongitude: document.querySelector('#goManualLongitude'),
   pickGoManualLocation: document.querySelector('#pickGoManualLocation'),
-  cancelGoManualLocationPick: document.querySelector('#cancelGoManualLocationPick'),
+  cancelGoManualLocationPick: document.querySelector(
+    '#cancelGoManualLocationPick',
+  ),
   goLocationStatus: document.querySelector('#goLocationStatus'),
   googleClientId: document.querySelector('#googleClientId'),
   connectGoogleDrive: document.querySelector('#connectGoogleDrive'),
@@ -551,6 +555,10 @@ function initMap() {
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(map);
 
+  map.createPane('goPositionPane');
+  map.getPane('goPositionPane').style.zIndex = '725';
+  map.getPane('goPositionPane').style.pointerEvents = 'none';
+
   lineLayer = L.layerGroup().addTo(map);
   mileMarkerLayer = L.layerGroup().addTo(map);
   pointLayer = L.layerGroup().addTo(map);
@@ -562,6 +570,7 @@ function initMap() {
       return;
     }
 
+    if (isRouteEditingLocked()) return;
     if (pointTouchMode !== 'add') return;
 
     addRoutePoint(
@@ -576,7 +585,13 @@ function initMap() {
   elements.mapStatus.textContent = 'Ready';
 }
 
+function isRouteEditingLocked() {
+  return activeRouteModeTab === 'go';
+}
+
 function addRoutePoint(lat, lng, name) {
+  if (isRouteEditingLocked()) return;
+
   pushUndoSnapshot();
   route = addPoint(route, { lat, lng, name });
   markRouteDirty({ geometryChanged: true });
@@ -664,6 +679,7 @@ function confirmClearRoute() {
 }
 
 function renderRoute() {
+  document.body.classList.toggle('is-go-mode', activeRouteModeTab === 'go');
   renderRouteFields();
   renderPointList();
   renderLibraryList();
@@ -679,11 +695,18 @@ function renderRoute() {
   elements.saveRoute.textContent = routeDirty ? 'Save' : 'Saved';
   elements.saveRoute.disabled = !routeDirty;
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
+  const routeEditingLocked = isRouteEditingLocked();
+  elements.routeName.disabled = routeEditingLocked;
+  elements.activityType.disabled = routeEditingLocked;
+  elements.loopToggle.disabled = routeEditingLocked;
+  elements.clearPoints.disabled = routeEditingLocked;
+  elements.undoRoute.disabled = routeEditingLocked || undoStack.length === 0;
+  elements.redoRoute.disabled = routeEditingLocked || redoStack.length === 0;
+  elements.pointAddMode.disabled = routeEditingLocked;
+  elements.pointDeleteMode.disabled = routeEditingLocked;
   elements.replotRoute.disabled =
     route.points.length < 2 || routePlan.status === 'pending';
   elements.replotRoute.classList.toggle('is-dirty', isRouteGeometryStale());
-  elements.undoRoute.disabled = undoStack.length === 0;
-  elements.redoRoute.disabled = redoStack.length === 0;
   renderPointTouchMode();
   renderGoMode();
   renderRoutingSettings();
@@ -874,6 +897,9 @@ function renderPointList() {
     return;
   }
 
+  const routeEditingLocked = isRouteEditingLocked();
+  const routeEditDisabledAttr = routeEditingLocked ? 'disabled' : '';
+
   elements.pointList.innerHTML = route.points
     .map((point, index) => {
       const segmentText = formatPointSegment(index);
@@ -886,7 +912,7 @@ function renderPointList() {
               <span class="point-number">${index + 1}</span>
               <label class="point-name-field">
                 <span class="sr-only">Point ${index + 1} name</span>
-                <input type="text" value="${escapeAttr(point.name)}" data-rename-point="${escapeAttr(point.id)}" />
+                <input type="text" value="${escapeAttr(point.name)}" data-rename-point="${escapeAttr(point.id)}" ${routeEditDisabledAttr} />
               </label>
             </div>
             <div class="point-segment-cell" data-testid="point-segment">
@@ -894,9 +920,9 @@ function renderPointList() {
               ${loopText}
             </div>
             <div class="point-actions" aria-label="Point ${index + 1} actions">
-              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="-1" aria-label="Up" title="Move up" ${index === 0 ? 'disabled' : ''}>↑</button>
-              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="1" aria-label="Down" title="Move down" ${index === route.points.length - 1 ? 'disabled' : ''}>↓</button>
-              <button type="button" class="small-button danger" data-delete-point="${escapeAttr(point.id)}" aria-label="Delete point ${index + 1}">Del</button>
+              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="-1" aria-label="Up" title="Move up" ${routeEditingLocked || index === 0 ? 'disabled' : ''}>↑</button>
+              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="1" aria-label="Down" title="Move down" ${routeEditingLocked || index === route.points.length - 1 ? 'disabled' : ''}>↓</button>
+              <button type="button" class="small-button danger" data-delete-point="${escapeAttr(point.id)}" aria-label="Delete point ${index + 1}" ${routeEditDisabledAttr}>Del</button>
             </div>
           </div>
         </li>
@@ -1035,10 +1061,10 @@ function renderMapRoute() {
 
   route.points.forEach((point, index) => {
     const marker = L.marker([point.lat, point.lng], {
-      draggable: true,
+      draggable: !isRouteEditingLocked(),
       icon: L.divIcon({
         className: 'route-marker-shell',
-        html: `<div class="route-marker">${index + 1}</div>`,
+        html: `<div class="route-marker" data-testid="route-marker" data-point-id="${escapeAttr(point.id)}">${index + 1}</div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       }),
@@ -1046,6 +1072,8 @@ function renderMapRoute() {
     });
 
     marker.on('dragend', (event) => {
+      if (isRouteEditingLocked()) return;
+
       const latLng = event.target.getLatLng();
       pushUndoSnapshot();
       route = updatePoint(route, point.id, {
@@ -1056,6 +1084,7 @@ function renderMapRoute() {
     });
 
     marker.on('click', () => {
+      if (isRouteEditingLocked()) return;
       if (pointTouchMode !== 'delete') return;
 
       pushUndoSnapshot();
@@ -1202,6 +1231,7 @@ function setActiveRouteModeTab(tabName, options = {}) {
   const showPlan = activeRouteModeTab === 'plan';
   const showGo = activeRouteModeTab === 'go';
 
+  document.body.classList.toggle('is-go-mode', showGo);
   elements.planModePanel.hidden = !showPlan;
   elements.goModePanel.hidden = !showGo;
 
@@ -1211,26 +1241,28 @@ function setActiveRouteModeTab(tabName, options = {}) {
     stopGoPositionWatch();
   }
 
-  renderGoMode();
-  persistAppState();
+  renderRoute();
 
   if (showGo && options.focusPrimaryAction) {
     focusGoPrimaryAction();
   }
 }
 
-
 function rearmGoSession() {
   if (goSessionStatus === 'complete' || goSessionStatus === 'done') {
     goSessionStatus = 'ready';
   }
   suppressGoPrimaryClickUntil = 0;
+  resetGoElapsedTimer();
   clearFinishHoldTimer();
 }
 
 function focusGoPrimaryAction() {
   window.requestAnimationFrame(() => {
-    elements.goPrimaryAction.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    elements.goPrimaryAction.scrollIntoView({
+      block: 'center',
+      behavior: 'smooth',
+    });
     elements.goPrimaryAction.focus({ preventScroll: true });
   });
 }
@@ -1241,11 +1273,13 @@ function renderGoMode() {
 
   elements.goRouteName.textContent = route.name || 'New route';
   elements.goDistanceText.textContent = formatMiles(routeDistanceMeters);
-  elements.goElapsedText.textContent = '0:00';
+  elements.goElapsedText.textContent = formatGoElapsed(getGoElapsedSeconds());
   elements.goPaceText.textContent = displayedPace;
   elements.goRemainingText.textContent = formatMiles(routeDistanceMeters);
-  elements.goProgressText.textContent = goSessionStatus === 'complete' ? '100%' : '0%';
-  elements.goProgressBar.style.width = goSessionStatus === 'complete' ? '100%' : '0%';
+  elements.goProgressText.textContent =
+    goSessionStatus === 'complete' ? '100%' : '0%';
+  elements.goProgressBar.style.width =
+    goSessionStatus === 'complete' ? '100%' : '0%';
   elements.goStatusText.textContent = getGoStatusText();
   renderGoPositionMarker();
 
@@ -1312,13 +1346,25 @@ function handleGoPrimaryAction() {
 
 function startGoSession() {
   if (route.points.length === 0) return;
+
+  if (goSessionStatus !== 'paused') {
+    goAccumulatedElapsedSeconds = 0;
+  }
+
   goSessionStatus = 'running';
+  goSessionStartedAt = Date.now();
+  startGoElapsedTimer();
   setActiveRouteModeTab('go');
+  renderGoMode();
 }
 
 function pauseGoSession() {
   if (goSessionStatus !== 'running') return;
+
+  goAccumulatedElapsedSeconds = getGoElapsedSeconds();
+  goSessionStartedAt = null;
   goSessionStatus = 'paused';
+  stopGoElapsedTimer();
   renderGoMode();
 }
 
@@ -1326,14 +1372,47 @@ function markGoSessionDone() {
   if (goSessionStatus !== 'paused') return;
   goSessionStatus = 'done';
   suppressGoPrimaryClickUntil = Date.now() + 500;
+  stopGoElapsedTimer();
   renderGoMode();
 }
 
 function completeGoSession() {
   lastGoStats = createGoStatsSnapshot();
   goSessionStatus = 'complete';
+  resetGoElapsedTimer();
   renderGoMode();
   saveLastGoStats(lastGoStats);
+}
+
+function startGoElapsedTimer() {
+  if (goElapsedTimerId !== null) return;
+
+  goElapsedTimerId = window.setInterval(() => {
+    if (activeRouteModeTab === 'go' && goSessionStatus === 'running') {
+      renderGoMode();
+    }
+  }, 250);
+}
+
+function stopGoElapsedTimer() {
+  if (goElapsedTimerId === null) return;
+
+  window.clearInterval(goElapsedTimerId);
+  goElapsedTimerId = null;
+}
+
+function resetGoElapsedTimer() {
+  stopGoElapsedTimer();
+  goSessionStartedAt = null;
+  goAccumulatedElapsedSeconds = 0;
+}
+
+function getGoElapsedSeconds() {
+  if (goSessionStatus === 'running' && goSessionStartedAt !== null) {
+    return (Date.now() - goSessionStartedAt) / 1000 + goAccumulatedElapsedSeconds;
+  }
+
+  return goAccumulatedElapsedSeconds;
 }
 
 function renderGoCompleteStats() {
@@ -1346,13 +1425,14 @@ function renderGoCompleteStats() {
 
 function createGoStatsSnapshot() {
   const routeDistanceMeters = getDisplayedRouteDistanceMeters();
+  const elapsedSeconds = Math.floor(getGoElapsedSeconds());
   return {
     routeName: route.name || 'New route',
     activityType: route.activityType,
     distanceMeters: routeDistanceMeters,
-    elapsedSeconds: 0,
+    elapsedSeconds,
     distance: formatMiles(routeDistanceMeters),
-    elapsed: '0:00',
+    elapsed: formatGoElapsed(elapsedSeconds),
     pace: formatDisplayedPace(routeDistanceMeters),
     completedAt: new Date().toISOString(),
   };
@@ -1360,7 +1440,10 @@ function createGoStatsSnapshot() {
 
 function saveLastGoStats(stats) {
   try {
-    window.localStorage?.setItem('walkBikeRun.lastGoStats', JSON.stringify(stats));
+    window.localStorage?.setItem(
+      'walkBikeRun.lastGoStats',
+      JSON.stringify(stats),
+    );
   } catch {
     // Ignore localStorage failures; the completion screen still shows the stats.
   }
@@ -1499,7 +1582,8 @@ function destinationLatLng(origin, bearingDegrees, offsetMeters) {
     originLng +
     Math.atan2(
       Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(originLat),
-      Math.cos(angularDistance) - Math.sin(originLat) * Math.sin(destinationLat),
+      Math.cos(angularDistance) -
+        Math.sin(originLat) * Math.sin(destinationLat),
     );
 
   return L.latLng(toDegrees(destinationLat), toDegrees(destinationLng));
@@ -1518,7 +1602,10 @@ function startGoPositionWatch() {
         position.coords.latitude,
         position.coords.longitude,
       );
-      const nextHeadingDegrees = getGoPositionHeadingDegrees(position, nextLatLng);
+      const nextHeadingDegrees = getGoPositionHeadingDegrees(
+        position,
+        nextLatLng,
+      );
 
       goPositionLatLng = nextLatLng;
       if (nextHeadingDegrees !== null) {
@@ -1579,6 +1666,8 @@ function renderGoPositionMarker() {
   if (!goPositionMarker) {
     goPositionMarker = L.marker(latLng, {
       interactive: false,
+      keyboard: false,
+      pane: 'goPositionPane',
       icon,
       zIndexOffset: 1000,
     }).addTo(goPositionLayer);
@@ -1624,7 +1713,7 @@ function createGoPositionIcon() {
   return L.divIcon({
     className: `go-position-marker-shell ${stateClass} ${activityClass}`,
     html: `
-      <div class="go-position-marker" aria-hidden="true">
+      <div class="go-position-marker" data-testid="go-position-marker" aria-hidden="true">
         <span class="go-position-icon">${label}</span>
       </div>
     `,
@@ -2154,7 +2243,8 @@ function startManualGoLocationPick() {
   pickingManualGoLocation = true;
   setPointTouchMode('idle');
   renderGoLocationSettings();
-  elements.mapStatus.textContent = 'Tap the map to set your manual Go location.';
+  elements.mapStatus.textContent =
+    'Tap the map to set your manual Go location.';
 }
 
 function cancelManualGoLocationPick() {
@@ -2544,6 +2634,19 @@ function formatMiles(meters) {
   return `${(meters / 1609.344).toFixed(2)} mi`;
 }
 
+function formatGoElapsed(secondsValue) {
+  const totalSeconds = Math.max(0, Math.floor(secondsValue));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function formatStatsDuration(minutes) {
   if (!Number.isFinite(minutes) || minutes <= 0) return '0m';
 
@@ -2631,12 +2734,16 @@ function escapeAttr(value) {
 }
 
 elements.routeName.addEventListener('change', (event) => {
+  if (isRouteEditingLocked()) return;
+
   pushUndoSnapshot();
   route = updateRoute(route, { name: event.target.value });
   markRouteDirty();
 });
 
 elements.activityType.addEventListener('change', (event) => {
+  if (isRouteEditingLocked()) return;
+
   pushUndoSnapshot();
   route = updateRoute(route, { activityType: event.target.value });
   markRouteDirty({ geometryChanged: true });
@@ -2674,7 +2781,10 @@ elements.goManualLongitude.addEventListener('change', (event) => {
   updateGoLocationSettings({ longitude: event.target.value.trim() });
 });
 
-elements.pickGoManualLocation.addEventListener('click', startManualGoLocationPick);
+elements.pickGoManualLocation.addEventListener(
+  'click',
+  startManualGoLocationPick,
+);
 elements.cancelGoManualLocationPick.addEventListener(
   'click',
   cancelManualGoLocationPick,
@@ -2682,14 +2792,19 @@ elements.cancelGoManualLocationPick.addEventListener(
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
 elements.replotRoute.addEventListener('click', recalculateRoute);
-elements.undoRoute.addEventListener('click', undoRouteEdit);
-elements.redoRoute.addEventListener('click', redoRouteEdit);
+elements.undoRoute.addEventListener('click', () => {
+  if (!isRouteEditingLocked()) undoRouteEdit();
+});
+elements.redoRoute.addEventListener('click', () => {
+  if (!isRouteEditingLocked()) redoRouteEdit();
+});
 elements.pointAddMode.addEventListener('click', () => setPointTouchMode('add'));
 elements.pointDeleteMode.addEventListener('click', () =>
   setPointTouchMode('delete'),
 );
 
 elements.clearPoints.addEventListener('click', () => {
+  if (isRouteEditingLocked()) return;
   if (!confirmClearRoute()) return;
   pushUndoSnapshot();
   setRoute(
@@ -2702,6 +2817,8 @@ elements.clearPoints.addEventListener('click', () => {
 });
 
 elements.loopToggle.addEventListener('change', (event) => {
+  if (isRouteEditingLocked()) return;
+
   pushUndoSnapshot();
   route = setLoop(route, event.target.checked);
   markRouteDirty({ geometryChanged: true });
@@ -2718,7 +2835,10 @@ elements.goPrimaryAction.addEventListener('click', handleGoPrimaryAction);
 elements.goPrimaryAction.addEventListener('pointerdown', beginFinishHold);
 elements.goPrimaryAction.addEventListener('pointerup', clearFinishHoldTimer);
 elements.goPrimaryAction.addEventListener('pointerleave', clearFinishHoldTimer);
-elements.goPrimaryAction.addEventListener('pointercancel', clearFinishHoldTimer);
+elements.goPrimaryAction.addEventListener(
+  'pointercancel',
+  clearFinishHoldTimer,
+);
 elements.goRecenter.addEventListener('click', recenterGoRoute);
 elements.currentRouteTab.addEventListener('click', () =>
   setActiveRouteTab('route'),
@@ -2814,6 +2934,8 @@ elements.loadLibraryFromDrive.addEventListener(
 );
 
 elements.pointList.addEventListener('click', (event) => {
+  if (isRouteEditingLocked()) return;
+
   const deleteButton = event.target.closest('[data-delete-point]');
   if (deleteButton) {
     pushUndoSnapshot();
@@ -2835,6 +2957,8 @@ elements.pointList.addEventListener('click', (event) => {
 });
 
 elements.pointList.addEventListener('change', (event) => {
+  if (isRouteEditingLocked()) return;
+
   const input = event.target.closest('[data-rename-point]');
   if (!input) return;
 

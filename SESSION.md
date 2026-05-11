@@ -59,6 +59,34 @@ Fixed two-point loop routes:
 - Added unit coverage for two-point loop distance, routing return legs, and GPX round-trip.
 - Re-ran `npm test`, `npm run lint`, `npm run build`, and `npm run test:e2e`.
 
+## v0.4.0 Go mode edit lockout
+
+Current branch: `dev/v0.4.0`.
+
+Changed in this pass:
+
+- Go mode now treats route editing as locked. Map clicks, marker clicks, marker drags, route list delete/move/rename controls, route name/activity/loop edits, clear, undo, and redo are blocked or disabled while Go mode is active.
+- Plan mode editing is preserved. Replot stays available.
+- Added a first mobile Go layout shell: on small screens, Go mode uses a full-screen map with the Go panel as a bottom overlay and page scrolling disabled.
+- Added Playwright coverage for Go-mode map/marker/list edit lockout and Plan-mode editing after returning from Go.
+
+Validation run in this session should include:
+
+```sh
+npm run lint
+npm test
+npm run test:e2e
+npm run build
+```
+
+Follow-up fix after desktop testing:
+
+- Re-rendered route markers on mode switch so already-created Plan markers lose their Leaflet draggable handlers in Go mode.
+- Moved the Go position/blip marker into a dedicated high-z-index Leaflet pane so it stays visible above route markers on desktop as well as mobile.
+- Added a real elapsed Go timer with a 250 ms UI refresh while running, preserving elapsed time across pause/resume and saving elapsed seconds in completion history.
+- Added Playwright assertions for visible Go blip and ticking elapsed time.
+
+
 ## Current product idea
 
 Build a browser webapp for planning walking, biking, and running routes.
