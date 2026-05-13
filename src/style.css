@@ -45,6 +45,10 @@ body {
   min-height: 100vh;
 }
 
+body.is-go-mode {
+  overscroll-behavior: none;
+}
+
 button,
 input,
 select {
@@ -485,7 +489,22 @@ select:focus {
   background: linear-gradient(180deg, #ffffff, var(--wbr-surface-muted));
   border: 1px solid var(--wbr-border);
   border-radius: var(--wbr-radius-lg);
+  display: flex;
+  flex-direction: column;
   padding: 0.7rem;
+}
+
+.go-dashboard-toggle {
+  display: none;
+}
+
+.go-dashboard-handle {
+  background: var(--wbr-border-strong);
+  border-radius: 999px;
+  display: block;
+  height: 0.25rem;
+  margin-right: 0.45rem;
+  width: 2.2rem;
 }
 
 .go-mode-header {
@@ -574,6 +593,34 @@ select:focus {
   display: block;
   height: 100%;
   width: 0;
+}
+
+.go-dashboard-details {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 0.75rem;
+}
+
+.go-detail-card {
+  background: #ffffff;
+  border: 1px solid #e3e7eb;
+  border-radius: var(--wbr-radius);
+  box-shadow: var(--wbr-shadow-soft);
+  padding: 0.58rem;
+}
+
+.go-detail-card strong {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+
+.go-detail-card p {
+  color: var(--wbr-muted);
+  font-size: 0.76rem;
+  line-height: 1.25;
+  margin: 0;
 }
 
 .go-active-panel[hidden],
@@ -1225,6 +1272,43 @@ select:focus {
   margin-bottom: 0.4rem;
 }
 
+@media (min-width: 851px) {
+  body.is-go-mode .panel {
+    max-height: calc(100vh - 4.6rem);
+  }
+
+  body.is-go-mode .go-mode-panel {
+    padding: 0.6rem;
+  }
+
+  body.is-go-mode .go-mode-header {
+    margin-bottom: 0.55rem;
+  }
+
+  body.is-go-mode .go-stat-grid,
+  body.is-go-mode .go-progress,
+  body.is-go-mode .go-dashboard-details {
+    margin-bottom: 0.55rem;
+  }
+
+  body.is-go-mode .go-stat-card,
+  body.is-go-mode .go-detail-card {
+    padding: 0.48rem;
+  }
+
+  body.is-go-mode .go-primary-control {
+    min-height: 3.8rem;
+  }
+
+  body.is-go-mode .go-control {
+    min-height: 2.8rem;
+  }
+
+  body.is-go-mode .go-mode-note {
+    margin-top: 0.4rem;
+  }
+}
+
 @media (max-width: 850px) {
   .app-shell {
     padding: 0.45rem;
@@ -1250,6 +1334,130 @@ select:focus {
 
   .panel {
     max-height: none;
+  }
+
+  body.is-go-mode {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  body.is-go-mode .app-shell {
+    gap: 0;
+    height: 100dvh;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  body.is-go-mode .app-header {
+    display: none;
+  }
+
+  body.is-go-mode .app-main {
+    display: block;
+    height: 100dvh;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+  }
+
+  body.is-go-mode .map-card {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    inset: 0;
+    min-height: 0;
+    position: absolute;
+  }
+
+  body.is-go-mode .map {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
+  body.is-go-mode .panel {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    display: block;
+    inset: auto 0.55rem 0.55rem;
+    max-height: calc(100dvh - 1.1rem);
+    overflow: visible;
+    padding: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 500;
+  }
+
+  body.is-go-mode .route-workspace,
+  body.is-go-mode .backup-section {
+    display: none;
+  }
+
+  body.is-go-mode .route-summary-section {
+    border: 0;
+    padding: 0;
+  }
+
+  body.is-go-mode .go-mode-panel {
+    background: rgb(255 255 255 / 94%);
+    border: 1px solid rgb(207 214 220 / 88%);
+    border-radius: 1rem;
+    box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 30%);
+    max-height: 82dvh;
+    overflow: auto;
+    padding: 0.6rem;
+    pointer-events: auto;
+  }
+
+  body.is-go-mode .go-dashboard-toggle {
+    background: transparent;
+    border: 0;
+    color: var(--wbr-muted);
+    display: inline-flex;
+    font-size: 0.76rem;
+    gap: 0.1rem;
+    justify-content: center;
+    margin: -0.2rem auto 0.45rem;
+    min-height: 1.5rem;
+    padding: 0.15rem 0.4rem;
+  }
+
+  body.is-go-mode .go-dashboard-toggle:hover,
+  body.is-go-mode .go-dashboard-toggle:focus-visible {
+    background: #eef1f4;
+  }
+
+  body.is-go-mode .go-mode-panel.is-collapsed .go-mode-header,
+  body.is-go-mode .go-mode-panel.is-collapsed .go-progress,
+  body.is-go-mode .go-mode-panel.is-collapsed .go-dashboard-details,
+  body.is-go-mode .go-mode-panel.is-collapsed .go-mode-note,
+  body.is-go-mode .go-mode-panel.is-collapsed .go-control,
+  body.is-go-mode .go-mode-panel.is-collapsed .go-stat-card:nth-child(4) {
+    display: none;
+  }
+
+  body.is-go-mode .go-mode-panel.is-collapsed .go-active-panel {
+    order: 1;
+  }
+
+  body.is-go-mode .go-mode-panel.is-collapsed .go-stat-grid {
+    gap: 0.35rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 0.45rem 0 0;
+    order: 2;
+  }
+
+  body.is-go-mode .go-mode-panel.is-collapsed .go-stat-card {
+    padding: 0.45rem;
+  }
+
+  body.is-go-mode .go-mode-panel.is-collapsed .go-stat-card strong {
+    font-size: 0.98rem;
+  }
+
+  body.is-go-mode .go-mode-panel.is-collapsed .go-primary-control {
+    min-height: 3.6rem;
   }
 }
 
@@ -1328,7 +1536,8 @@ select:focus {
     padding: 0.55rem;
   }
 
-  .go-stat-grid {
+  .go-stat-grid,
+  .go-dashboard-details {
     grid-template-columns: 1fr;
   }
 

@@ -78,6 +78,7 @@ let activeRouteModeTab = normalizeRouteModeTab(
   persistedAppState.activeRouteModeTab,
 );
 let goSessionStatus = 'ready';
+let goDashboardExpanded = false;
 let pickingManualGoLocation = false;
 let finishHoldTimer = null;
 let suppressGoPrimaryClickUntil = 0;
@@ -194,6 +195,10 @@ app.innerHTML = `
           </div>
 
           <div id="goModePanel" class="route-mode-panel go-mode-panel" aria-label="Go mode" hidden>
+            <button id="goDashboardToggle" type="button" class="go-dashboard-toggle secondary" aria-expanded="false" data-testid="go-dashboard-toggle">
+              <span class="go-dashboard-handle" aria-hidden="true"></span>
+              <span id="goDashboardToggleText">Show more</span>
+            </button>
             <div class="go-mode-header">
               <div>
                 <p class="eyebrow go-mode-eyebrow">Go mode</p>
@@ -226,6 +231,16 @@ app.innerHTML = `
               </div>
               <div class="go-progress-track" aria-hidden="true">
                 <span id="goProgressBar" class="go-progress-bar"></span>
+              </div>
+            </div>
+            <div id="goDashboardDetails" class="go-dashboard-details" data-testid="go-dashboard-details">
+              <div class="go-detail-card">
+                <span class="go-stat-label">Est. remaining</span>
+                <strong id="goTimeRemainingText" data-testid="go-time-remaining-text">0m</strong>
+              </div>
+              <div class="go-detail-card">
+                <span class="go-stat-label">Splits</span>
+                <p>Split times can land here later.</p>
               </div>
             </div>
             <div id="goActivePanel" class="go-active-panel" data-testid="go-active-panel">
@@ -539,6 +554,8 @@ const elements = {
   enterGoMode: document.querySelector('#enterGoMode'),
   planModePanel: document.querySelector('#planModePanel'),
   goModePanel: document.querySelector('#goModePanel'),
+  goDashboardToggle: document.querySelector('#goDashboardToggle'),
+  goDashboardToggleText: document.querySelector('#goDashboardToggleText'),
   exitGoMode: document.querySelector('#exitGoMode'),
   goRouteName: document.querySelector('#goRouteName'),
   goDistanceText: document.querySelector('#goDistanceText'),
@@ -548,6 +565,8 @@ const elements = {
   goStatusText: document.querySelector('#goStatusText'),
   goProgressText: document.querySelector('#goProgressText'),
   goProgressBar: document.querySelector('#goProgressBar'),
+  goDashboardDetails: document.querySelector('#goDashboardDetails'),
+  goTimeRemainingText: document.querySelector('#goTimeRemainingText'),
   goActivePanel: document.querySelector('#goActivePanel'),
   goPrimaryAction: document.querySelector('#goPrimaryAction'),
   goPrimaryLabel: document.querySelector('#goPrimaryLabel'),
@@ -1288,6 +1307,7 @@ function setActiveRouteModeTab(tabName, options = {}) {
 
   elements.planModePanel.hidden = !showPlan;
   elements.goModePanel.hidden = !showGo;
+  document.body.classList.toggle('is-go-mode', showGo);
 
   if (showGo) {
     startGoPositionWatch();
@@ -1297,6 +1317,7 @@ function setActiveRouteModeTab(tabName, options = {}) {
 
   renderMapRoute();
   renderGoMode();
+  requestMapResize();
   persistAppState();
 
   if (showGo && options.focusPrimaryAction) {
@@ -1336,7 +1357,11 @@ function renderGoMode() {
   elements.goRemainingText.textContent = formatMiles(progress.remainingMeters);
   elements.goProgressText.textContent = `${Math.round(progress.percent)}%`;
   elements.goProgressBar.style.width = `${progress.percent}%`;
+  elements.goTimeRemainingText.textContent = formatStatsDuration(
+    getGoRemainingMinutes(progress.remainingMeters),
+  );
   elements.goStatusText.textContent = getGoStatusText();
+  renderGoDashboardState();
   renderGoPositionMarker();
 
   const hasRoute = route.points.length > 0;
@@ -1357,6 +1382,39 @@ function renderGoMode() {
   elements.goPrimaryAction.classList.add(buttonState.className);
   elements.goRecenter.disabled = route.points.length === 0;
   renderGoCompleteStats();
+}
+
+function getGoRemainingMinutes(remainingMeters) {
+  const speedMph = getTargetSpeedMph();
+  if (!Number.isFinite(speedMph) || speedMph <= 0) return 0;
+
+  return (remainingMeters / METERS_PER_MILE / speedMph) * 60;
+}
+
+function renderGoDashboardState() {
+  elements.goModePanel.classList.toggle('is-expanded', goDashboardExpanded);
+  elements.goModePanel.classList.toggle('is-collapsed', !goDashboardExpanded);
+  elements.goDashboardToggle.setAttribute(
+    'aria-expanded',
+    goDashboardExpanded ? 'true' : 'false',
+  );
+  elements.goDashboardToggleText.textContent = goDashboardExpanded
+    ? 'Show less'
+    : 'Show more';
+}
+
+function toggleGoDashboard() {
+  goDashboardExpanded = !goDashboardExpanded;
+  renderGoDashboardState();
+  requestMapResize();
+}
+
+function requestMapResize() {
+  if (!map) return;
+
+  window.requestAnimationFrame(() => {
+    map.invalidateSize();
+  });
 }
 
 function getGoPrimaryButtonState() {
@@ -3250,6 +3308,7 @@ elements.enterGoMode.addEventListener('click', () =>
 elements.exitGoMode.addEventListener('click', () =>
   setActiveRouteModeTab('plan'),
 );
+elements.goDashboardToggle.addEventListener('click', toggleGoDashboard);
 elements.goPrimaryAction.addEventListener('click', handleGoPrimaryAction);
 elements.goPrimaryAction.addEventListener('pointerdown', beginFinishHold);
 elements.goPrimaryAction.addEventListener('pointerup', clearFinishHoldTimer);

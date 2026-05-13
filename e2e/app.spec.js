@@ -94,6 +94,47 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
 });
 
+
+test('uses a collapsed mobile Go dashboard with expandable details', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.goto('/');
+
+  await addPointAtMap(page, { x: 180, y: 180 });
+  await addPointAtMap(page, { x: 310, y: 180 });
+  await page.getByTestId('enter-go-mode').click();
+
+  await expect(page.locator('body')).toHaveClass(/is-go-mode/);
+  await expect(page.getByTestId('map')).toBeVisible();
+  await expect(page.getByTestId('go-dashboard-toggle')).toBeVisible();
+  await expect(page.getByTestId('go-dashboard-toggle')).toContainText(
+    'Show more',
+  );
+  await expect(page.getByTestId('go-primary-action')).toBeVisible();
+  await expect(page.getByTestId('go-distance-text')).toBeVisible();
+  await expect(page.getByTestId('go-elapsed-text')).toBeVisible();
+  await expect(page.getByTestId('go-pace-text')).toBeVisible();
+  await expect(page.getByTestId('go-remaining-text')).toBeHidden();
+  await expect(page.getByTestId('go-progress-text')).toBeHidden();
+  await expect(page.getByTestId('go-dashboard-details')).toBeHidden();
+
+  await page.getByTestId('go-dashboard-toggle').click();
+
+  await expect(page.getByTestId('go-dashboard-toggle')).toContainText(
+    'Show less',
+  );
+  await expect(page.getByTestId('go-route-name')).toBeVisible();
+  await expect(page.getByTestId('go-remaining-text')).toBeVisible();
+  await expect(page.getByTestId('go-progress-text')).toBeVisible();
+  await expect(page.getByTestId('go-time-remaining-text')).toBeVisible();
+  await expect(page.getByTestId('go-recenter-button')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.locator('body')).not.toHaveClass(/is-go-mode/);
+  await expect(page.getByRole('heading', { name: 'Route list' })).toBeVisible();
+});
+
 test('stores manual Go location override settings', async ({ page }) => {
   await page.goto('/');
 

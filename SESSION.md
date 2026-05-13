@@ -265,3 +265,40 @@ What changed:
   active.
 - Added e2e coverage that route markers are interactive in Plan, non-interactive
   in Go, map clicks do not add points in Go, and Plan editing resumes afterward.
+
+## 2026-05-13 Mobile Go dashboard bottom sheet pass
+
+Added a first-pass mobile Go dashboard shell:
+
+- Mobile Go mode now adds a body class so the map can fill the viewport.
+- Page scrolling is disabled while mobile Go mode is active.
+- The normal desktop Go panel remains mostly unchanged.
+- On mobile, the Go panel becomes a bottom dashboard over the map.
+- The dashboard starts collapsed with the main Go button plus covered distance,
+  elapsed time, and pace/speed.
+- The dashboard can expand to show route name, remaining distance, progress,
+  Recenter, estimated time remaining, and a splits placeholder.
+- Switching back to Plan mode removes the Go body class and restores the normal
+  route workspace.
+
+Validation run here:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not run in this container because Playwright Chromium
+  is not installed.
+
+Next recommended check:
+
+- Run `npm run test:e2e` locally.
+- Manually test mobile Go mode on a phone or narrow desktop viewport.
+- Check collapsed/expanded dashboard spacing while moving, paused, and complete.
+
+
+## 2026-05-13 Desktop Go panel scrollbar trim
+
+Trimmed the desktop Go panel spacing after the mobile dashboard pass. The mobile
+bottom-sheet rules are unchanged. On desktop-width Go mode, the side panel now
+has a little more vertical room and slightly tighter internal spacing so expanded
+Go content is less likely to show a small scrollbar.
