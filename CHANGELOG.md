@@ -2,6 +2,71 @@
 
 ## Unreleased
 
+## v0.4.0-dev - In progress
+
+### Added
+
+- Added a Plan / Go mode split.
+  - Plan mode keeps the compact route editor.
+  - Go mode provides larger activity-focused controls.
+
+- Added the Go activity button flow.
+  - Start begins an activity.
+  - Pause pauses movement/timing.
+  - Resume continues the activity.
+  - Long-press Resume changes the control to Done.
+  - Done saves completion stats and shows the completion screen.
+
+- Added completed Go activity history.
+  - Completed stats are attached to the active saved route when possible.
+  - Unsaved routes create an Unnamed route with history attached.
+  - Route library rows now show completion history.
+
+- Added Go route-following marker support.
+  - The marker uses walk/run/bike icons.
+  - Marker color follows Go state.
+  - Recenter focuses ahead of the marker using route direction.
+  - Manual Go location override is available in Settings.
+
+- Added route-level target pace/speed.
+  - Walk/run routes use target pace.
+  - Bike routes use target speed.
+  - Settings now include default pace/speed values for each activity.
+  - Saved routes preserve their target speed.
+
+- Added estimated Go movement when live movement input is unavailable.
+  - The Go marker advances along the route using the route target pace/speed.
+  - Pause freezes estimated movement.
+  - Resume continues from the paused position.
+  - Loop routes wrap; non-loop routes clamp at the end.
+  - Estimated positions are visually marked.
+
+- Added a mobile Go dashboard bottom sheet.
+  - Mobile Go mode makes the map the main full-screen surface.
+  - Page scrolling is disabled while mobile Go mode is active.
+  - Collapsed dashboard shows the main Go action, distance, elapsed time, and pace/speed.
+  - Expanded dashboard shows route details, remaining distance, progress, Recenter, estimated time remaining, and a splits placeholder.
+
+### Changed
+
+- Go mode now locks route editing.
+  - Route points cannot be added, deleted, dragged, renamed, reordered, cleared, undone, or redone while Go mode is active.
+  - Map panning, zooming, Recenter, and Go marker updates remain available.
+  - Returning to Plan mode restores editing.
+
+- Go Recenter now uses activity-specific zoom levels and looks ahead of the current/estimated position.
+
+- Desktop Go panel sizing was adjusted so the expanded panel can use more of the visible viewport height.
+
+### Fixed
+
+- Fixed the Go marker disappearing behind route markers on desktop.
+- Fixed the Go elapsed timer so it advances while running and preserves pause/resume time.
+- Fixed blank manual Go latitude/longitude fields being parsed as `0,0`.
+- Fixed Go start fallback so the first route waypoint is used when no valid live/manual location is available.
+- Fixed route marker drag handlers carrying into Go mode after switching from Plan.
+- Fixed several Go e2e expectations after distance/pace semantics changed.
+
 ## v0.3.0 - 2026-05-07
 
 Walk/Bike/Run now has a much stronger route editing workflow, saved route library, Google Drive backup support, and a cleaner compact UI.
