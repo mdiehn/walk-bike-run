@@ -167,6 +167,37 @@ test('uses route target pace and Go pace defaults', async ({ page }) => {
   await expect(page.getByTestId('pace-text')).toHaveText('8:15 m/mi');
 });
 
+
+test('locks route marker interactions while Go mode is active', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await addPointAtMap(page, { x: 180, y: 180 });
+  await addPointAtMap(page, { x: 320, y: 180 });
+
+  await expect(page.locator('.route-marker-shell').first()).toHaveClass(
+    /leaflet-interactive/,
+  );
+
+  await page.getByTestId('enter-go-mode').click();
+
+  await expect(page.locator('.route-marker-shell').first()).not.toHaveClass(
+    /leaflet-interactive/,
+  );
+
+  await page.getByTestId('map').click({ position: { x: 240, y: 220 } });
+  await expect(page.getByTestId('point-row')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.locator('.route-marker-shell').first()).toHaveClass(
+    /leaflet-interactive/,
+  );
+
+  await addPointAtMap(page, { x: 240, y: 220 });
+  await expect(page.getByTestId('point-row')).toHaveCount(3);
+});
+
 test('dead-reckons Go movement when live movement input is unavailable', async ({
   page,
 }) => {

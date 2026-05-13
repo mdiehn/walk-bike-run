@@ -605,6 +605,7 @@ function initMap() {
       return;
     }
 
+    if (!canEditRoute()) return;
     if (pointTouchMode !== 'add') return;
 
     addRoutePoint(
@@ -620,6 +621,8 @@ function initMap() {
 }
 
 function addRoutePoint(lat, lng, name) {
+  if (!canEditRoute()) return;
+
   pushUndoSnapshot();
   route = addPoint(route, { lat, lng, name });
   markRouteDirty({ geometryChanged: true });
@@ -651,6 +654,8 @@ function restoreRouteSnapshot(snapshot) {
 }
 
 function undoRouteEdit() {
+  if (!canEditRoute()) return;
+
   const snapshot = undoStack.pop();
   if (!snapshot) return;
 
@@ -659,6 +664,8 @@ function undoRouteEdit() {
 }
 
 function redoRouteEdit() {
+  if (!canEditRoute()) return;
+
   const snapshot = redoStack.pop();
   if (!snapshot) return;
 
@@ -1074,6 +1081,10 @@ function renderLibraryFilterControls() {
   });
 }
 
+function canEditRoute() {
+  return activeRouteModeTab === 'plan';
+}
+
 function renderMapRoute() {
   pointLayer.clearLayers();
   lineLayer.clearLayers();
@@ -1097,9 +1108,13 @@ function renderMapRoute() {
     renderMileMarkers(linePoints);
   }
 
+  const routeEditingEnabled = canEditRoute();
+
   route.points.forEach((point, index) => {
     const marker = L.marker([point.lat, point.lng], {
-      draggable: true,
+      draggable: routeEditingEnabled,
+      interactive: routeEditingEnabled,
+      keyboard: routeEditingEnabled,
       icon: L.divIcon({
         className: 'route-marker-shell',
         html: `<div class="route-marker">${index + 1}</div>`,
@@ -1109,25 +1124,30 @@ function renderMapRoute() {
       title: point.name,
     });
 
-    marker.on('dragend', (event) => {
-      const latLng = event.target.getLatLng();
-      pushUndoSnapshot();
-      route = updatePoint(route, point.id, {
-        lat: latLng.lat,
-        lng: latLng.lng,
+    if (routeEditingEnabled) {
+      marker.on('dragend', (event) => {
+        if (!canEditRoute()) return;
+
+        const latLng = event.target.getLatLng();
+        pushUndoSnapshot();
+        route = updatePoint(route, point.id, {
+          lat: latLng.lat,
+          lng: latLng.lng,
+        });
+        markRouteDirty({ geometryChanged: true });
       });
-      markRouteDirty({ geometryChanged: true });
-    });
 
-    marker.on('click', () => {
-      if (pointTouchMode !== 'delete') return;
+      marker.on('click', () => {
+        if (!canEditRoute()) return;
+        if (pointTouchMode !== 'delete') return;
 
-      pushUndoSnapshot();
-      route = deletePoint(route, point.id);
-      markRouteDirty({ geometryChanged: true });
-    });
+        pushUndoSnapshot();
+        route = deletePoint(route, point.id);
+        markRouteDirty({ geometryChanged: true });
+      });
 
-    marker.bindTooltip(`${index + 1}. ${point.name}`);
+      marker.bindTooltip(`${index + 1}. ${point.name}`);
+    }
     marker.addTo(pointLayer);
   });
 }
@@ -1275,6 +1295,7 @@ function setActiveRouteModeTab(tabName, options = {}) {
     stopGoPositionWatch();
   }
 
+  renderMapRoute();
   renderGoMode();
   persistAppState();
 
@@ -3090,12 +3111,16 @@ function escapeAttr(value) {
 }
 
 elements.routeName.addEventListener('change', (event) => {
+  if (!canEditRoute()) return;
+
   pushUndoSnapshot();
   route = updateRoute(route, { name: event.target.value });
   markRouteDirty();
 });
 
 elements.activityType.addEventListener('change', (event) => {
+  if (!canEditRoute()) return;
+
   const activityType = event.target.value;
   pushUndoSnapshot();
   route = updateRoute(route, {
@@ -3106,6 +3131,8 @@ elements.activityType.addEventListener('change', (event) => {
 });
 
 elements.targetPaceInput.addEventListener('change', (event) => {
+  if (!canEditRoute()) return;
+
   const targetSpeedMph = parseTargetSpeedInput(
     route.activityType,
     event.target.value,
@@ -3182,12 +3209,17 @@ elements.fitRoute.addEventListener('click', fitRouteToMap);
 elements.replotRoute.addEventListener('click', recalculateRoute);
 elements.undoRoute.addEventListener('click', undoRouteEdit);
 elements.redoRoute.addEventListener('click', redoRouteEdit);
-elements.pointAddMode.addEventListener('click', () => setPointTouchMode('add'));
-elements.pointDeleteMode.addEventListener('click', () =>
-  setPointTouchMode('delete'),
-);
+elements.pointAddMode.addEventListener('click', () => {
+  if (!canEditRoute()) return;
+  setPointTouchMode('add');
+});
+elements.pointDeleteMode.addEventListener('click', () => {
+  if (!canEditRoute()) return;
+  setPointTouchMode('delete');
+});
 
 elements.clearPoints.addEventListener('click', () => {
+  if (!canEditRoute()) return;
   if (!confirmClearRoute()) return;
   pushUndoSnapshot();
   setRoute(
@@ -3204,6 +3236,8 @@ elements.clearPoints.addEventListener('click', () => {
 });
 
 elements.loopToggle.addEventListener('change', (event) => {
+  if (!canEditRoute()) return;
+
   pushUndoSnapshot();
   route = setLoop(route, event.target.checked);
   markRouteDirty({ geometryChanged: true });
@@ -3319,6 +3353,8 @@ elements.loadLibraryFromDrive.addEventListener(
 );
 
 elements.pointList.addEventListener('click', (event) => {
+  if (!canEditRoute()) return;
+
   const deleteButton = event.target.closest('[data-delete-point]');
   if (deleteButton) {
     pushUndoSnapshot();
@@ -3340,6 +3376,8 @@ elements.pointList.addEventListener('click', (event) => {
 });
 
 elements.pointList.addEventListener('change', (event) => {
+  if (!canEditRoute()) return;
+
   const input = event.target.closest('[data-rename-point]');
   if (!input) return;
 

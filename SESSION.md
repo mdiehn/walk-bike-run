@@ -249,3 +249,19 @@ Next recommended check:
 - Run `npm run test:e2e` locally.
 - Manually test desktop Go mode with and without the Firefox geolocation spoofing extension.
 - Confirm the estimated marker label, dashed border, movement, and arrow heading look right on the real map.
+
+## 2026-05-12 Go marker edit-lockout regression fix
+
+Fixed a regression from the target pace / dead-reckoning pass where desktop route
+markers could still be visually dragged while Go mode was active.
+
+What changed:
+
+- Route markers are rendered draggable/interactable only in Plan mode.
+- Switching between Plan and Go re-renders route markers so existing Leaflet drag
+  handlers do not carry over into Go mode.
+- Map-click route adds are ignored while Go mode is active.
+- Hidden Plan editing controls are guarded against route mutation while Go mode is
+  active.
+- Added e2e coverage that route markers are interactive in Plan, non-interactive
+  in Go, map clicks do not add points in Go, and Plan editing resumes afterward.
