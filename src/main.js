@@ -11,6 +11,7 @@ import {
   movePoint,
   renamePoint,
   routeDurationMinutes,
+  routeSpeedMph,
   setLoop,
   updatePoint,
   updateRoute,
@@ -59,6 +60,13 @@ const GO_RECENTER_VIEW_BY_ACTIVITY = {
 };
 const GO_POSITION_HEADING_MIN_MOVE_METERS = 3;
 const GO_LOCATION_SETTINGS_STORAGE_KEY = 'walkBikeRun.goLocationSettings';
+const GO_PACE_DEFAULTS_STORAGE_KEY = 'walkBikeRun.goPaceDefaults';
+const GO_POSITION_SOURCE_ESTIMATED = 'estimated';
+const GO_POSITION_SOURCE_LIVE = 'live';
+const GO_POSITION_SOURCE_MANUAL = 'manual';
+const GO_POSITION_SOURCE_ROUTE_START = 'route-start';
+const GO_POSITION_TICK_MS = 1000;
+const METERS_PER_MILE = 1609.344;
 
 let routeLibrary = loadRouteLibrary();
 const persistedAppState = loadAppState();
@@ -70,9 +78,6 @@ let activeRouteModeTab = normalizeRouteModeTab(
   persistedAppState.activeRouteModeTab,
 );
 let goSessionStatus = 'ready';
-let goSessionStartedAt = null;
-let goAccumulatedElapsedSeconds = 0;
-let goElapsedTimerId = null;
 let pickingManualGoLocation = false;
 let finishHoldTimer = null;
 let suppressGoPrimaryClickUntil = 0;
@@ -104,10 +109,17 @@ let goPositionMarker = null;
 let goPositionLatLng = null;
 let goPositionHeadingDegrees = null;
 let goPositionWatchId = null;
+let goSessionStartedAt = null;
+let goSessionStartedIso = null;
+let goAccumulatedElapsedSeconds = 0;
+let goElapsedTimerId = null;
+let goEstimatedBearingDegrees = null;
+let goHasMovementInput = false;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
 let routingSettings = loadRoutingSettings();
 let goLocationSettings = loadGoLocationSettings();
+let goPaceDefaults = loadGoPaceDefaults();
 let undoStack = [];
 let redoStack = [];
 
@@ -148,6 +160,10 @@ app.innerHTML = `
                   <option value="bike">Bike</option>
                   <option value="run">Run</option>
                 </select>
+              </label>
+              <label class="field-row target-pace-field">
+                <span id="targetPaceLabel">Target pace</span>
+                <input id="targetPaceInput" type="text" autocomplete="off" inputmode="decimal" data-testid="target-pace-input" />
               </label>
             </div>
             <label class="checkbox-row">
@@ -334,6 +350,24 @@ app.innerHTML = `
             </label>
             <p id="routingStatus" class="hint-text routing-status" data-testid="routing-status">Routing uses OSRM until a Worker URL is set.</p>
             </div>
+            <div class="settings-group go-pace-settings" aria-label="Go pace defaults">
+              <h4>Go pace defaults</h4>
+              <div class="route-field-grid go-pace-default-grid">
+                <label class="field-row compact-field">
+                  <span>Walk pace (min/mi)</span>
+                  <input id="defaultWalkPace" type="text" autocomplete="off" inputmode="decimal" data-testid="default-walk-pace" />
+                </label>
+                <label class="field-row compact-field">
+                  <span>Run pace (min/mi)</span>
+                  <input id="defaultRunPace" type="text" autocomplete="off" inputmode="decimal" data-testid="default-run-pace" />
+                </label>
+                <label class="field-row compact-field">
+                  <span>Bike speed (mph)</span>
+                  <input id="defaultBikeSpeed" type="number" min="0.1" max="100" step="0.1" autocomplete="off" inputmode="decimal" data-testid="default-bike-speed" />
+                </label>
+              </div>
+              <p class="hint-text">Defaults apply to new routes and when you change a route's activity.</p>
+            </div>
             <div class="settings-group go-location-settings" aria-label="Go location settings">
               <h4>Go location</h4>
               <label class="checkbox-row">
@@ -441,6 +475,8 @@ const elements = {
   saveStatus: document.querySelector('#saveStatus'),
   routeName: document.querySelector('#routeName'),
   activityType: document.querySelector('#activityType'),
+  targetPaceLabel: document.querySelector('#targetPaceLabel'),
+  targetPaceInput: document.querySelector('#targetPaceInput'),
   loopToggle: document.querySelector('#loopToggle'),
   fitRoute: document.querySelector('#fitRoute'),
   replotRoute: document.querySelector('#replotRoute'),
@@ -483,6 +519,9 @@ const elements = {
   ),
   libraryBackupControls: document.querySelector('#libraryBackupControls'),
   backupStatus: document.querySelector('#backupStatus'),
+  defaultWalkPace: document.querySelector('#defaultWalkPace'),
+  defaultRunPace: document.querySelector('#defaultRunPace'),
+  defaultBikeSpeed: document.querySelector('#defaultBikeSpeed'),
   goManualLocationEnabled: document.querySelector('#goManualLocationEnabled'),
   goManualLatitude: document.querySelector('#goManualLatitude'),
   goManualLongitude: document.querySelector('#goManualLongitude'),
@@ -555,10 +594,6 @@ function initMap() {
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(map);
 
-  map.createPane('goPositionPane');
-  map.getPane('goPositionPane').style.zIndex = '725';
-  map.getPane('goPositionPane').style.pointerEvents = 'none';
-
   lineLayer = L.layerGroup().addTo(map);
   mileMarkerLayer = L.layerGroup().addTo(map);
   pointLayer = L.layerGroup().addTo(map);
@@ -570,7 +605,6 @@ function initMap() {
       return;
     }
 
-    if (isRouteEditingLocked()) return;
     if (pointTouchMode !== 'add') return;
 
     addRoutePoint(
@@ -585,13 +619,7 @@ function initMap() {
   elements.mapStatus.textContent = 'Ready';
 }
 
-function isRouteEditingLocked() {
-  return activeRouteModeTab === 'go';
-}
-
 function addRoutePoint(lat, lng, name) {
-  if (isRouteEditingLocked()) return;
-
   pushUndoSnapshot();
   route = addPoint(route, { lat, lng, name });
   markRouteDirty({ geometryChanged: true });
@@ -679,7 +707,6 @@ function confirmClearRoute() {
 }
 
 function renderRoute() {
-  document.body.classList.toggle('is-go-mode', activeRouteModeTab === 'go');
   renderRouteFields();
   renderPointList();
   renderLibraryList();
@@ -695,22 +722,16 @@ function renderRoute() {
   elements.saveRoute.textContent = routeDirty ? 'Save' : 'Saved';
   elements.saveRoute.disabled = !routeDirty;
   elements.saveRoute.classList.toggle('is-dirty', routeDirty);
-  const routeEditingLocked = isRouteEditingLocked();
-  elements.routeName.disabled = routeEditingLocked;
-  elements.activityType.disabled = routeEditingLocked;
-  elements.loopToggle.disabled = routeEditingLocked;
-  elements.clearPoints.disabled = routeEditingLocked;
-  elements.undoRoute.disabled = routeEditingLocked || undoStack.length === 0;
-  elements.redoRoute.disabled = routeEditingLocked || redoStack.length === 0;
-  elements.pointAddMode.disabled = routeEditingLocked;
-  elements.pointDeleteMode.disabled = routeEditingLocked;
   elements.replotRoute.disabled =
     route.points.length < 2 || routePlan.status === 'pending';
   elements.replotRoute.classList.toggle('is-dirty', isRouteGeometryStale());
+  elements.undoRoute.disabled = undoStack.length === 0;
+  elements.redoRoute.disabled = redoStack.length === 0;
   renderPointTouchMode();
   renderGoMode();
   renderRoutingSettings();
   renderGoLocationSettings();
+  renderGoPaceDefaults();
   renderCloudSettings();
   renderBackupPanel();
   persistAppState();
@@ -721,7 +742,27 @@ function renderRouteFields() {
     elements.routeName.value = route.name;
   }
   elements.activityType.value = route.activityType;
+  elements.targetPaceLabel.textContent = getTargetPaceLabel();
+  if (document.activeElement !== elements.targetPaceInput) {
+    elements.targetPaceInput.value = formatTargetPaceInput(route);
+  }
   elements.loopToggle.checked = route.loop;
+}
+
+function renderGoPaceDefaults() {
+  if (document.activeElement !== elements.defaultWalkPace) {
+    elements.defaultWalkPace.value = formatPaceInputFromSpeedMph(
+      goPaceDefaults.walk,
+    );
+  }
+  if (document.activeElement !== elements.defaultRunPace) {
+    elements.defaultRunPace.value = formatPaceInputFromSpeedMph(
+      goPaceDefaults.run,
+    );
+  }
+  if (document.activeElement !== elements.defaultBikeSpeed) {
+    elements.defaultBikeSpeed.value = formatSpeedInput(goPaceDefaults.bike);
+  }
 }
 
 function renderRoutingSettings() {
@@ -897,9 +938,6 @@ function renderPointList() {
     return;
   }
 
-  const routeEditingLocked = isRouteEditingLocked();
-  const routeEditDisabledAttr = routeEditingLocked ? 'disabled' : '';
-
   elements.pointList.innerHTML = route.points
     .map((point, index) => {
       const segmentText = formatPointSegment(index);
@@ -912,7 +950,7 @@ function renderPointList() {
               <span class="point-number">${index + 1}</span>
               <label class="point-name-field">
                 <span class="sr-only">Point ${index + 1} name</span>
-                <input type="text" value="${escapeAttr(point.name)}" data-rename-point="${escapeAttr(point.id)}" ${routeEditDisabledAttr} />
+                <input type="text" value="${escapeAttr(point.name)}" data-rename-point="${escapeAttr(point.id)}" />
               </label>
             </div>
             <div class="point-segment-cell" data-testid="point-segment">
@@ -920,9 +958,9 @@ function renderPointList() {
               ${loopText}
             </div>
             <div class="point-actions" aria-label="Point ${index + 1} actions">
-              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="-1" aria-label="Up" title="Move up" ${routeEditingLocked || index === 0 ? 'disabled' : ''}>↑</button>
-              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="1" aria-label="Down" title="Move down" ${routeEditingLocked || index === route.points.length - 1 ? 'disabled' : ''}>↓</button>
-              <button type="button" class="small-button danger" data-delete-point="${escapeAttr(point.id)}" aria-label="Delete point ${index + 1}" ${routeEditDisabledAttr}>Del</button>
+              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="-1" aria-label="Up" title="Move up" ${index === 0 ? 'disabled' : ''}>↑</button>
+              <button type="button" class="icon-button secondary" data-move-point="${escapeAttr(point.id)}" data-move-delta="1" aria-label="Down" title="Move down" ${index === route.points.length - 1 ? 'disabled' : ''}>↓</button>
+              <button type="button" class="small-button danger" data-delete-point="${escapeAttr(point.id)}" aria-label="Delete point ${index + 1}">Del</button>
             </div>
           </div>
         </li>
@@ -1061,10 +1099,10 @@ function renderMapRoute() {
 
   route.points.forEach((point, index) => {
     const marker = L.marker([point.lat, point.lng], {
-      draggable: !isRouteEditingLocked(),
+      draggable: true,
       icon: L.divIcon({
         className: 'route-marker-shell',
-        html: `<div class="route-marker" data-testid="route-marker" data-point-id="${escapeAttr(point.id)}">${index + 1}</div>`,
+        html: `<div class="route-marker">${index + 1}</div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       }),
@@ -1072,8 +1110,6 @@ function renderMapRoute() {
     });
 
     marker.on('dragend', (event) => {
-      if (isRouteEditingLocked()) return;
-
       const latLng = event.target.getLatLng();
       pushUndoSnapshot();
       route = updatePoint(route, point.id, {
@@ -1084,7 +1120,6 @@ function renderMapRoute() {
     });
 
     marker.on('click', () => {
-      if (isRouteEditingLocked()) return;
       if (pointTouchMode !== 'delete') return;
 
       pushUndoSnapshot();
@@ -1231,7 +1266,6 @@ function setActiveRouteModeTab(tabName, options = {}) {
   const showPlan = activeRouteModeTab === 'plan';
   const showGo = activeRouteModeTab === 'go';
 
-  document.body.classList.toggle('is-go-mode', showGo);
   elements.planModePanel.hidden = !showPlan;
   elements.goModePanel.hidden = !showGo;
 
@@ -1241,7 +1275,8 @@ function setActiveRouteModeTab(tabName, options = {}) {
     stopGoPositionWatch();
   }
 
-  renderRoute();
+  renderGoMode();
+  persistAppState();
 
   if (showGo && options.focusPrimaryAction) {
     focusGoPrimaryAction();
@@ -1251,9 +1286,9 @@ function setActiveRouteModeTab(tabName, options = {}) {
 function rearmGoSession() {
   if (goSessionStatus === 'complete' || goSessionStatus === 'done') {
     goSessionStatus = 'ready';
+    resetGoSessionProgress();
   }
   suppressGoPrimaryClickUntil = 0;
-  resetGoElapsedTimer();
   clearFinishHoldTimer();
 }
 
@@ -1269,17 +1304,17 @@ function focusGoPrimaryAction() {
 
 function renderGoMode() {
   const routeDistanceMeters = getDisplayedRouteDistanceMeters();
+  const elapsedSeconds = getGoElapsedSeconds();
+  const progress = getGoProgressState(routeDistanceMeters, elapsedSeconds);
   const displayedPace = formatDisplayedPace(routeDistanceMeters);
 
   elements.goRouteName.textContent = route.name || 'New route';
-  elements.goDistanceText.textContent = formatMiles(routeDistanceMeters);
-  elements.goElapsedText.textContent = formatGoElapsed(getGoElapsedSeconds());
+  elements.goDistanceText.textContent = formatMiles(progress.coveredMeters);
+  elements.goElapsedText.textContent = formatGoElapsedSeconds(elapsedSeconds);
   elements.goPaceText.textContent = displayedPace;
-  elements.goRemainingText.textContent = formatMiles(routeDistanceMeters);
-  elements.goProgressText.textContent =
-    goSessionStatus === 'complete' ? '100%' : '0%';
-  elements.goProgressBar.style.width =
-    goSessionStatus === 'complete' ? '100%' : '0%';
+  elements.goRemainingText.textContent = formatMiles(progress.remainingMeters);
+  elements.goProgressText.textContent = `${Math.round(progress.percent)}%`;
+  elements.goProgressBar.style.width = `${progress.percent}%`;
   elements.goStatusText.textContent = getGoStatusText();
   renderGoPositionMarker();
 
@@ -1318,7 +1353,11 @@ function getGoPrimaryButtonState() {
 
 function getGoStatusText() {
   if (route.points.length === 0) return 'Plan a route first';
-  if (goSessionStatus === 'running') return 'Moving placeholder';
+  if (goSessionStatus === 'running') {
+    return shouldUseEstimatedGoPosition()
+      ? 'Moving by estimate'
+      : 'Moving with location';
+  }
   if (goSessionStatus === 'paused') return 'Paused';
   if (goSessionStatus === 'done') return 'Ready to save';
   if (goSessionStatus === 'complete') return 'Done';
@@ -1347,72 +1386,76 @@ function handleGoPrimaryAction() {
 function startGoSession() {
   if (route.points.length === 0) return;
 
-  if (goSessionStatus !== 'paused') {
-    goAccumulatedElapsedSeconds = 0;
+  if (goSessionStatus === 'ready' || goSessionStatus === 'complete') {
+    resetGoSessionProgress();
+  }
+
+  if (!goSessionStartedIso) {
+    goSessionStartedIso = new Date().toISOString();
   }
 
   goSessionStatus = 'running';
   goSessionStartedAt = Date.now();
   startGoElapsedTimer();
   setActiveRouteModeTab('go');
-  renderGoMode();
 }
 
 function pauseGoSession() {
   if (goSessionStatus !== 'running') return;
-
-  goAccumulatedElapsedSeconds = getGoElapsedSeconds();
-  goSessionStartedAt = null;
-  goSessionStatus = 'paused';
+  accumulateGoElapsedSeconds();
   stopGoElapsedTimer();
+  goSessionStatus = 'paused';
   renderGoMode();
 }
 
 function markGoSessionDone() {
   if (goSessionStatus !== 'paused') return;
+  stopGoElapsedTimer();
   goSessionStatus = 'done';
   suppressGoPrimaryClickUntil = Date.now() + 500;
-  stopGoElapsedTimer();
   renderGoMode();
 }
 
 function completeGoSession() {
+  stopGoElapsedTimer();
   lastGoStats = createGoStatsSnapshot();
   goSessionStatus = 'complete';
-  resetGoElapsedTimer();
   renderGoMode();
   saveLastGoStats(lastGoStats);
 }
 
 function startGoElapsedTimer() {
   if (goElapsedTimerId !== null) return;
-
-  goElapsedTimerId = window.setInterval(() => {
-    if (activeRouteModeTab === 'go' && goSessionStatus === 'running') {
-      renderGoMode();
-    }
-  }, 250);
+  goElapsedTimerId = window.setInterval(renderGoMode, GO_POSITION_TICK_MS);
 }
 
 function stopGoElapsedTimer() {
   if (goElapsedTimerId === null) return;
-
   window.clearInterval(goElapsedTimerId);
   goElapsedTimerId = null;
 }
 
-function resetGoElapsedTimer() {
+function accumulateGoElapsedSeconds() {
+  if (!goSessionStartedAt) return;
+  goAccumulatedElapsedSeconds += (Date.now() - goSessionStartedAt) / 1000;
+  goSessionStartedAt = null;
+}
+
+function resetGoSessionProgress() {
   stopGoElapsedTimer();
   goSessionStartedAt = null;
+  goSessionStartedIso = null;
   goAccumulatedElapsedSeconds = 0;
+  goHasMovementInput = false;
+  goEstimatedBearingDegrees = null;
 }
 
 function getGoElapsedSeconds() {
-  if (goSessionStatus === 'running' && goSessionStartedAt !== null) {
-    return (Date.now() - goSessionStartedAt) / 1000 + goAccumulatedElapsedSeconds;
-  }
-
-  return goAccumulatedElapsedSeconds;
+  const runningSeconds =
+    goSessionStatus === 'running' && goSessionStartedAt
+      ? (Date.now() - goSessionStartedAt) / 1000
+      : 0;
+  return Math.max(0, goAccumulatedElapsedSeconds + runningSeconds);
 }
 
 function renderGoCompleteStats() {
@@ -1425,16 +1468,19 @@ function renderGoCompleteStats() {
 
 function createGoStatsSnapshot() {
   const routeDistanceMeters = getDisplayedRouteDistanceMeters();
-  const elapsedSeconds = Math.floor(getGoElapsedSeconds());
+  const elapsedSeconds = getGoElapsedSeconds();
+  const progress = getGoProgressState(routeDistanceMeters, elapsedSeconds);
+  const completedAt = new Date().toISOString();
   return {
     routeName: route.name || 'New route',
     activityType: route.activityType,
-    distanceMeters: routeDistanceMeters,
+    distanceMeters: progress.coveredMeters,
     elapsedSeconds,
-    distance: formatMiles(routeDistanceMeters),
-    elapsed: formatGoElapsed(elapsedSeconds),
-    pace: formatDisplayedPace(routeDistanceMeters),
-    completedAt: new Date().toISOString(),
+    distance: formatMiles(progress.coveredMeters),
+    elapsed: formatGoElapsedSeconds(elapsedSeconds),
+    pace: formatActualPace(progress.coveredMeters, elapsedSeconds),
+    startedAt: goSessionStartedIso ?? completedAt,
+    completedAt,
   };
 }
 
@@ -1531,6 +1577,10 @@ function getGoRecenterBearingDegrees(latLng) {
     return goPositionHeadingDegrees;
   }
 
+  if (Number.isFinite(goEstimatedBearingDegrees)) {
+    return goEstimatedBearingDegrees;
+  }
+
   return getRouteAheadBearingDegrees(latLng);
 }
 
@@ -1607,12 +1657,27 @@ function startGoPositionWatch() {
         nextLatLng,
       );
 
+      if (
+        goPositionLatLng &&
+        distanceMeters(goPositionLatLng, nextLatLng) >=
+          GO_POSITION_HEADING_MIN_MOVE_METERS
+      ) {
+        goHasMovementInput = true;
+      }
+
+      if (
+        Number.isFinite(position.coords.speed) &&
+        position.coords.speed > 0.5
+      ) {
+        goHasMovementInput = true;
+      }
+
       goPositionLatLng = nextLatLng;
       if (nextHeadingDegrees !== null) {
         goPositionHeadingDegrees = nextHeadingDegrees;
       }
 
-      renderGoPositionMarker();
+      renderGoMode();
     },
     () => {
       renderGoPositionMarker();
@@ -1655,26 +1720,24 @@ function stopGoPositionWatch() {
 function renderGoPositionMarker() {
   if (!goPositionLayer || activeRouteModeTab !== 'go') return;
 
-  const latLng = getGoPositionLatLng();
-  if (!latLng) {
+  const position = getGoPositionState();
+  if (!position?.latLng) {
     clearGoPositionMarker();
     return;
   }
 
-  const icon = createGoPositionIcon();
+  const icon = createGoPositionIcon(position);
 
   if (!goPositionMarker) {
-    goPositionMarker = L.marker(latLng, {
+    goPositionMarker = L.marker(position.latLng, {
       interactive: false,
-      keyboard: false,
-      pane: 'goPositionPane',
       icon,
       zIndexOffset: 1000,
     }).addTo(goPositionLayer);
     return;
   }
 
-  goPositionMarker.setLatLng(latLng);
+  goPositionMarker.setLatLng(position.latLng);
   goPositionMarker.setIcon(icon);
 }
 
@@ -1686,16 +1749,151 @@ function clearGoPositionMarker() {
 }
 
 function getGoPositionLatLng() {
-  const manualLatLng = getManualGoLocationLatLng();
-  if (manualLatLng) return manualLatLng;
+  return getGoPositionState()?.latLng ?? null;
+}
 
-  const firstRoutePointLatLng = getFirstRoutePointLatLng();
-  if (goSessionStatus === 'ready') {
-    return firstRoutePointLatLng;
+function getGoPositionState() {
+  const estimatedPosition = getEstimatedGoPosition();
+  if (shouldUseEstimatedGoPosition() && estimatedPosition) {
+    goEstimatedBearingDegrees = estimatedPosition.bearingDegrees;
+    return {
+      latLng: estimatedPosition.latLng,
+      source: GO_POSITION_SOURCE_ESTIMATED,
+      bearingDegrees: estimatedPosition.bearingDegrees,
+    };
   }
 
-  if (goPositionLatLng) return goPositionLatLng;
-  return firstRoutePointLatLng;
+  const manualLatLng = getManualGoLocationLatLng();
+  if (manualLatLng) {
+    return {
+      latLng: manualLatLng,
+      source: GO_POSITION_SOURCE_MANUAL,
+      bearingDegrees: getRouteAheadBearingDegrees(manualLatLng),
+    };
+  }
+
+  if (goPositionLatLng) {
+    return {
+      latLng: goPositionLatLng,
+      source: GO_POSITION_SOURCE_LIVE,
+      bearingDegrees:
+        goPositionHeadingDegrees ??
+        getRouteAheadBearingDegrees(goPositionLatLng),
+    };
+  }
+
+  const firstRoutePointLatLng = getFirstRoutePointLatLng();
+  if (firstRoutePointLatLng) {
+    return {
+      latLng: firstRoutePointLatLng,
+      source: GO_POSITION_SOURCE_ROUTE_START,
+      bearingDegrees: getRouteAheadBearingDegrees(firstRoutePointLatLng),
+    };
+  }
+
+  return null;
+}
+
+function shouldUseEstimatedGoPosition() {
+  if (!['running', 'paused', 'done'].includes(goSessionStatus)) return false;
+  if (goHasMovementInput) return false;
+  return getDisplayedRouteCoordinates().length > 1;
+}
+
+function getEstimatedGoPosition() {
+  const coordinates = getDisplayedRouteCoordinates();
+  if (coordinates.length < 2) return null;
+
+  const elapsedSeconds = getGoElapsedSeconds();
+  const distanceMetersValue = getEstimatedGoDistanceMeters(elapsedSeconds);
+  return getPositionAlongCoordinates(
+    coordinates,
+    distanceMetersValue,
+    route.loop,
+  );
+}
+
+function getEstimatedGoDistanceMeters(elapsedSeconds) {
+  const metersPerSecond = (getTargetSpeedMph() * METERS_PER_MILE) / 3600;
+  const rawDistanceMeters = Math.max(0, elapsedSeconds * metersPerSecond);
+  const routeDistanceMeters = getDisplayedRouteDistanceMeters();
+
+  if (route.loop) return rawDistanceMeters;
+  return Math.min(rawDistanceMeters, routeDistanceMeters);
+}
+
+function getPositionAlongCoordinates(
+  coordinates,
+  distanceMetersValue,
+  shouldWrap,
+) {
+  const segmentData = getCoordinateSegmentData(coordinates);
+  const routeDistanceMeters = segmentData.totalDistanceMeters;
+
+  if (routeDistanceMeters <= 0) {
+    return {
+      latLng: L.latLng(coordinates[0][0], coordinates[0][1]),
+      bearingDegrees: null,
+      distanceOnRouteMeters: 0,
+    };
+  }
+
+  const targetDistance = shouldWrap
+    ? distanceMetersValue % routeDistanceMeters
+    : Math.min(distanceMetersValue, routeDistanceMeters);
+
+  let remainingDistance = targetDistance;
+  for (const segment of segmentData.segments) {
+    if (remainingDistance <= segment.distanceMeters) {
+      const ratio =
+        segment.distanceMeters > 0
+          ? remainingDistance / segment.distanceMeters
+          : 0;
+      const lat =
+        segment.from.lat + (segment.to.lat - segment.from.lat) * ratio;
+      const lng =
+        segment.from.lng + (segment.to.lng - segment.from.lng) * ratio;
+      return {
+        latLng: L.latLng(lat, lng),
+        bearingDegrees: segment.bearingDegrees,
+        distanceOnRouteMeters: targetDistance,
+      };
+    }
+    remainingDistance -= segment.distanceMeters;
+  }
+
+  const last = coordinates[coordinates.length - 1];
+  const lastSegment = segmentData.segments.at(-1);
+  return {
+    latLng: L.latLng(last[0], last[1]),
+    bearingDegrees: lastSegment?.bearingDegrees ?? null,
+    distanceOnRouteMeters: routeDistanceMeters,
+  };
+}
+
+function getCoordinateSegmentData(coordinates) {
+  const segments = [];
+  let totalDistanceMeters = 0;
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const from = {
+      lat: coordinates[index - 1][0],
+      lng: coordinates[index - 1][1],
+    };
+    const to = { lat: coordinates[index][0], lng: coordinates[index][1] };
+    const segmentDistanceMeters = distanceMeters(from, to);
+    if (segmentDistanceMeters <= 0) continue;
+
+    segments.push({
+      from,
+      to,
+      distanceMeters: segmentDistanceMeters,
+      bearingDegrees: getBearingDegrees(from, to),
+    });
+    totalDistanceMeters += segmentDistanceMeters;
+  }
+
+  return { segments, totalDistanceMeters };
 }
 
 function getFirstRoutePointLatLng() {
@@ -1705,20 +1903,31 @@ function getFirstRoutePointLatLng() {
   return L.latLng(firstPoint.lat, firstPoint.lng);
 }
 
-function createGoPositionIcon() {
+function createGoPositionIcon(position) {
   const stateClass = getGoPositionStateClass();
+  const sourceClass = `go-position-source-${position.source}`;
   const activityClass = `go-position-${route.activityType}`;
   const label = getGoPositionActivityLabel();
+  const bearingDegrees = Number.isFinite(position.bearingDegrees)
+    ? position.bearingDegrees
+    : 0;
+  const showBearing = Number.isFinite(position.bearingDegrees);
+  const sourceLabel =
+    position.source === GO_POSITION_SOURCE_ESTIMATED
+      ? '<span class="go-position-source-label">est</span>'
+      : '';
 
   return L.divIcon({
-    className: `go-position-marker-shell ${stateClass} ${activityClass}`,
+    className: `go-position-marker-shell ${stateClass} ${sourceClass} ${activityClass}`,
     html: `
-      <div class="go-position-marker" data-testid="go-position-marker" aria-hidden="true">
+      <div class="go-position-marker" aria-hidden="true" data-testid="go-position-marker">
+        <span class="go-position-bearing" style="transform: translateX(-50%) rotate(${bearingDegrees}deg);" ${showBearing ? '' : 'hidden'}>▲</span>
         <span class="go-position-icon">${label}</span>
+        ${sourceLabel}
       </div>
     `,
-    iconSize: [38, 38],
-    iconAnchor: [19, 19],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
   });
 }
 
@@ -2089,10 +2298,10 @@ function formatSegmentDistanceAndTime(label, segment) {
 }
 
 function estimatedSegmentDurationSeconds(distanceMetersValue) {
-  const speedMph = activitySpeedMph(route.activityType);
+  const speedMph = getTargetSpeedMph();
   if (!speedMph || !Number.isFinite(distanceMetersValue)) return 0;
 
-  const distanceMiles = distanceMetersValue / 1609.344;
+  const distanceMiles = distanceMetersValue / METERS_PER_MILE;
   return (distanceMiles / speedMph) * 3600;
 }
 
@@ -2218,6 +2427,46 @@ function saveGoLocationSettings(storage = globalThis.localStorage) {
     GO_LOCATION_SETTINGS_STORAGE_KEY,
     JSON.stringify(goLocationSettings),
   );
+}
+
+function loadGoPaceDefaults(storage = globalThis.localStorage) {
+  try {
+    const rawSettings = storage?.getItem(GO_PACE_DEFAULTS_STORAGE_KEY);
+    const parsedSettings = rawSettings ? JSON.parse(rawSettings) : {};
+
+    return {
+      walk: normalizeSpeedMph(parsedSettings.walk, activitySpeedMph('walk')),
+      run: normalizeSpeedMph(parsedSettings.run, activitySpeedMph('run')),
+      bike: normalizeSpeedMph(parsedSettings.bike, activitySpeedMph('bike')),
+    };
+  } catch {
+    return {
+      walk: activitySpeedMph('walk'),
+      run: activitySpeedMph('run'),
+      bike: activitySpeedMph('bike'),
+    };
+  }
+}
+
+function saveGoPaceDefaults(storage = globalThis.localStorage) {
+  storage?.setItem(
+    GO_PACE_DEFAULTS_STORAGE_KEY,
+    JSON.stringify(goPaceDefaults),
+  );
+}
+
+function updateGoPaceDefault(activityType, speedMph) {
+  goPaceDefaults = {
+    ...goPaceDefaults,
+    [activityType]: normalizeSpeedMph(speedMph, activitySpeedMph(activityType)),
+  };
+  saveGoPaceDefaults();
+  renderGoPaceDefaults();
+}
+
+function normalizeSpeedMph(value, fallback) {
+  const speed = Number(value);
+  return Number.isFinite(speed) && speed > 0 ? speed : fallback;
 }
 
 function updateGoLocationSettings(nextSettings) {
@@ -2473,12 +2722,52 @@ function getDisplayedRouteDistanceMeters() {
 }
 
 function getDisplayedRouteDurationMinutes() {
-  return (
-    getDisplayedRouteSegments().reduce(
-      (total, segment) => total + segment.duration,
-      0,
-    ) / 60
-  );
+  const distanceMetersValue = getDisplayedRouteDistanceMeters();
+  if (distanceMetersValue <= 0) return 0;
+
+  return (distanceMetersValue / METERS_PER_MILE / getTargetSpeedMph()) * 60;
+}
+
+function getGoProgressState(routeDistanceMeters, elapsedSeconds) {
+  if (routeDistanceMeters <= 0) {
+    return { coveredMeters: 0, remainingMeters: 0, percent: 0 };
+  }
+
+  if (goSessionStatus === 'complete') {
+    const completedMeters = lastGoStats?.distanceMeters ?? routeDistanceMeters;
+    const visibleMeters = route.loop
+      ? completedMeters % routeDistanceMeters
+      : Math.min(completedMeters, routeDistanceMeters);
+    return {
+      coveredMeters: completedMeters,
+      remainingMeters: Math.max(0, routeDistanceMeters - visibleMeters),
+      percent: clampPercent((visibleMeters / routeDistanceMeters) * 100),
+    };
+  }
+
+  if (goSessionStatus === 'ready') {
+    return {
+      coveredMeters: 0,
+      remainingMeters: routeDistanceMeters,
+      percent: 0,
+    };
+  }
+
+  const coveredMeters = getEstimatedGoDistanceMeters(elapsedSeconds);
+  const visibleMeters = route.loop
+    ? coveredMeters % routeDistanceMeters
+    : Math.min(coveredMeters, routeDistanceMeters);
+
+  return {
+    coveredMeters,
+    remainingMeters: Math.max(0, routeDistanceMeters - visibleMeters),
+    percent: clampPercent((visibleMeters / routeDistanceMeters) * 100),
+  };
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
 }
 
 function getSegmentForPoint(index) {
@@ -2634,19 +2923,6 @@ function formatMiles(meters) {
   return `${(meters / 1609.344).toFixed(2)} mi`;
 }
 
-function formatGoElapsed(secondsValue) {
-  const totalSeconds = Math.max(0, Math.floor(secondsValue));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  }
-
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
 function formatStatsDuration(minutes) {
   if (!Number.isFinite(minutes) || minutes <= 0) return '0m';
 
@@ -2676,23 +2952,103 @@ function formatLibraryDuration(minutes) {
   return days > 0 ? `${days}+${timeText}` : timeText;
 }
 
-function formatDisplayedPace(distanceMetersValue) {
+function formatDisplayedPace() {
+  return formatSpeedForActivity(route.activityType, getTargetSpeedMph());
+}
+
+function formatActualPace(distanceMetersValue, elapsedSeconds) {
+  if (elapsedSeconds <= 0 || distanceMetersValue <= 0) {
+    return formatDisplayedPace(distanceMetersValue);
+  }
+
+  const miles = distanceMetersValue / METERS_PER_MILE;
   if (route.activityType === 'bike') {
-    const hours = getDisplayedRouteDurationMinutes() / 60;
-    const miles = distanceMetersValue / 1609.344;
-    const speed =
-      hours > 0 ? miles / hours : activitySpeedMph(route.activityType);
+    const hours = elapsedSeconds / 3600;
+    const speed = hours > 0 ? miles / hours : getTargetSpeedMph();
     return `${speed.toFixed(1)} mph`;
   }
 
-  const miles = distanceMetersValue / 1609.344;
-  const paceMinutes =
-    miles > 0
-      ? getDisplayedRouteDurationMinutes() / miles
-      : 60 / activitySpeedMph(route.activityType);
+  const paceMinutes = elapsedSeconds / 60 / miles;
+  return `${formatPaceMinutes(paceMinutes)} m/mi`;
+}
+
+function formatSpeedForActivity(activityType, speedMph) {
+  if (activityType === 'bike') return `${speedMph.toFixed(1)} mph`;
+  return `${formatPaceMinutes(60 / speedMph)} m/mi`;
+}
+
+function formatPaceMinutes(paceMinutes) {
   const minutes = Math.floor(paceMinutes);
   const seconds = Math.round((paceMinutes - minutes) * 60);
-  return `${minutes}:${String(seconds).padStart(2, '0')} m/mi`;
+  if (seconds === 60) return `${minutes + 1}:00`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatTargetPaceInput(routeValue) {
+  const speedMph = routeSpeedMph(routeValue);
+  if (routeValue.activityType === 'bike') return formatSpeedInput(speedMph);
+  return formatPaceInputFromSpeedMph(speedMph);
+}
+
+function getTargetPaceLabel() {
+  return route.activityType === 'bike'
+    ? 'Target speed (mph)'
+    : 'Target pace (min/mi)';
+}
+
+function getTargetSpeedMph(routeValue = route) {
+  return routeSpeedMph(routeValue);
+}
+
+function getDefaultSpeedMph(activityType) {
+  return goPaceDefaults[activityType] ?? activitySpeedMph(activityType);
+}
+
+function parseTargetSpeedInput(activityType, value, fallbackSpeedMph) {
+  if (activityType === 'bike') {
+    const speed = Number(value);
+    return Number.isFinite(speed) && speed > 0 ? speed : fallbackSpeedMph;
+  }
+
+  const paceMinutes = parsePaceMinutes(value);
+  return paceMinutes > 0 ? 60 / paceMinutes : fallbackSpeedMph;
+}
+
+function parsePaceMinutes(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  if (text.includes(':')) {
+    const [minutesPart, secondsPart = '0'] = text.split(':');
+    const minutes = Number(minutesPart);
+    const seconds = Number(secondsPart);
+    if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+    return minutes + seconds / 60;
+  }
+
+  const minutes = Number(text);
+  return Number.isFinite(minutes) ? minutes : null;
+}
+
+function formatPaceInputFromSpeedMph(speedMph) {
+  return formatPaceMinutes(60 / speedMph);
+}
+
+function formatSpeedInput(speedMph) {
+  return speedMph.toFixed(1);
+}
+
+function formatGoElapsedSeconds(seconds) {
+  const roundedSeconds = Math.floor(Math.max(0, seconds));
+  const hours = Math.floor(roundedSeconds / 3600);
+  const minutes = Math.floor((roundedSeconds % 3600) / 60);
+  const remainderSeconds = roundedSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainderSeconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(remainderSeconds).padStart(2, '0')}`;
 }
 
 function formatActivityType(activityType) {
@@ -2734,19 +3090,30 @@ function escapeAttr(value) {
 }
 
 elements.routeName.addEventListener('change', (event) => {
-  if (isRouteEditingLocked()) return;
-
   pushUndoSnapshot();
   route = updateRoute(route, { name: event.target.value });
   markRouteDirty();
 });
 
 elements.activityType.addEventListener('change', (event) => {
-  if (isRouteEditingLocked()) return;
-
+  const activityType = event.target.value;
   pushUndoSnapshot();
-  route = updateRoute(route, { activityType: event.target.value });
+  route = updateRoute(route, {
+    activityType,
+    targetSpeedMph: getDefaultSpeedMph(activityType),
+  });
   markRouteDirty({ geometryChanged: true });
+});
+
+elements.targetPaceInput.addEventListener('change', (event) => {
+  const targetSpeedMph = parseTargetSpeedInput(
+    route.activityType,
+    event.target.value,
+    getTargetSpeedMph(),
+  );
+  pushUndoSnapshot();
+  route = updateRoute(route, { targetSpeedMph });
+  markRouteDirty();
 });
 
 elements.routingProvider.addEventListener('change', (event) => {
@@ -2767,6 +3134,27 @@ elements.orsBaseUrl.addEventListener('change', (event) => {
   saveRoutingSettings();
   routePlan = createEmptyRoutePlan();
   renderRoute();
+});
+
+elements.defaultWalkPace.addEventListener('change', (event) => {
+  updateGoPaceDefault(
+    'walk',
+    parseTargetSpeedInput('walk', event.target.value, goPaceDefaults.walk),
+  );
+});
+
+elements.defaultRunPace.addEventListener('change', (event) => {
+  updateGoPaceDefault(
+    'run',
+    parseTargetSpeedInput('run', event.target.value, goPaceDefaults.run),
+  );
+});
+
+elements.defaultBikeSpeed.addEventListener('change', (event) => {
+  updateGoPaceDefault(
+    'bike',
+    parseTargetSpeedInput('bike', event.target.value, goPaceDefaults.bike),
+  );
 });
 
 elements.goManualLocationEnabled.addEventListener('change', (event) => {
@@ -2792,23 +3180,22 @@ elements.cancelGoManualLocationPick.addEventListener(
 
 elements.fitRoute.addEventListener('click', fitRouteToMap);
 elements.replotRoute.addEventListener('click', recalculateRoute);
-elements.undoRoute.addEventListener('click', () => {
-  if (!isRouteEditingLocked()) undoRouteEdit();
-});
-elements.redoRoute.addEventListener('click', () => {
-  if (!isRouteEditingLocked()) redoRouteEdit();
-});
+elements.undoRoute.addEventListener('click', undoRouteEdit);
+elements.redoRoute.addEventListener('click', redoRouteEdit);
 elements.pointAddMode.addEventListener('click', () => setPointTouchMode('add'));
 elements.pointDeleteMode.addEventListener('click', () =>
   setPointTouchMode('delete'),
 );
 
 elements.clearPoints.addEventListener('click', () => {
-  if (isRouteEditingLocked()) return;
   if (!confirmClearRoute()) return;
   pushUndoSnapshot();
   setRoute(
-    createRoute({ name: 'New route', activityType: route.activityType }),
+    createRoute({
+      name: 'New route',
+      activityType: route.activityType,
+      targetSpeedMph: getDefaultSpeedMph(route.activityType),
+    }),
     {
       savedRouteId: null,
       dirty: false,
@@ -2817,8 +3204,6 @@ elements.clearPoints.addEventListener('click', () => {
 });
 
 elements.loopToggle.addEventListener('change', (event) => {
-  if (isRouteEditingLocked()) return;
-
   pushUndoSnapshot();
   route = setLoop(route, event.target.checked);
   markRouteDirty({ geometryChanged: true });
@@ -2934,8 +3319,6 @@ elements.loadLibraryFromDrive.addEventListener(
 );
 
 elements.pointList.addEventListener('click', (event) => {
-  if (isRouteEditingLocked()) return;
-
   const deleteButton = event.target.closest('[data-delete-point]');
   if (deleteButton) {
     pushUndoSnapshot();
@@ -2957,8 +3340,6 @@ elements.pointList.addEventListener('click', (event) => {
 });
 
 elements.pointList.addEventListener('change', (event) => {
-  if (isRouteEditingLocked()) return;
-
   const input = event.target.closest('[data-rename-point]');
   if (!input) return;
 

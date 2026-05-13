@@ -272,6 +272,10 @@ h2 {
   justify-content: space-between;
 }
 
+.target-pace-field input {
+  max-width: 9rem;
+}
+
 .route-name-note {
   color: var(--wbr-muted-soft) !important;
   font-size: 0.62rem !important;
@@ -280,6 +284,7 @@ h2 {
 }
 
 input[type='text'],
+input[type='number'],
 input[type='url'],
 select {
   background: #ffffff;
@@ -294,6 +299,7 @@ select {
 }
 
 input[type='text']:focus,
+input[type='number']:focus,
 input[type='url']:focus,
 select:focus {
   border-color: var(--wbr-primary);
@@ -1247,68 +1253,6 @@ select:focus {
   }
 }
 
-@media (max-width: 850px) {
-  body.is-go-mode {
-    overflow: hidden;
-  }
-
-  body.is-go-mode .app-shell {
-    height: 100dvh;
-    padding: 0;
-  }
-
-  body.is-go-mode .app-header {
-    display: none;
-  }
-
-  body.is-go-mode .app-main {
-    display: block;
-    height: 100dvh;
-    position: relative;
-  }
-
-  body.is-go-mode .map-card {
-    border: 0;
-    border-radius: 0;
-    inset: 0;
-    min-height: 100dvh;
-    position: absolute;
-  }
-
-  body.is-go-mode .map {
-    min-height: 100dvh;
-  }
-
-  body.is-go-mode .panel {
-    background: transparent;
-    border: 0;
-    bottom: 0;
-    box-shadow: none;
-    left: 0;
-    max-height: 48vh;
-    overflow: auto;
-    padding: 0.55rem;
-    position: fixed;
-    right: 0;
-    z-index: 1000;
-  }
-
-  body.is-go-mode .route-summary-section {
-    border: 0;
-    padding: 0;
-  }
-
-  body.is-go-mode .route-workspace,
-  body.is-go-mode .backup-section {
-    display: none;
-  }
-
-  body.is-go-mode .go-mode-panel {
-    border-radius: 1rem 1rem 0 0;
-    box-shadow: 0 -0.4rem 1.4rem rgb(15 23 42 / 0.2);
-  }
-}
-
 @media (max-width: 520px) {
   .app-header {
     flex-direction: column;
@@ -1338,6 +1282,10 @@ select:focus {
 
   .route-field-grid {
     grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 0.38fr);
+  }
+
+  .target-pace-field input {
+    max-width: 9rem;
   }
 
   .route-name-note {
@@ -1407,10 +1355,44 @@ select:focus {
   color: #ffffff;
   display: flex;
   font-size: 1.3rem;
-  height: 38px;
+  height: 44px;
   justify-content: center;
   line-height: 1;
-  width: 38px;
+  position: relative;
+  width: 44px;
+}
+
+.go-position-bearing {
+  color: #111827;
+  font-size: 1.25rem;
+  font-weight: 900;
+  left: 50%;
+  line-height: 1;
+  position: absolute;
+  text-shadow: 0 1px 2px rgb(255 255 255 / 90%);
+  top: -1.05rem;
+  transform-origin: 50% 150%;
+}
+
+.go-position-source-estimated .go-position-marker {
+  border-color: #111827;
+  border-style: dashed;
+}
+
+.go-position-source-label {
+  background: #111827;
+  border-radius: 999px;
+  bottom: -0.65rem;
+  color: #ffffff;
+  font-size: 0.52rem;
+  font-weight: 900;
+  left: 50%;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 0.12rem 0.24rem;
+  position: absolute;
+  text-transform: uppercase;
+  transform: translateX(-50%);
 }
 
 .go-position-icon {

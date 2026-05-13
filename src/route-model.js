@@ -12,16 +12,25 @@ export const ACTIVITY_SPEEDS_MPH = {
   run: 6,
 };
 
+const MIN_TARGET_SPEED_MPH = 0.1;
+const MAX_TARGET_SPEED_MPH = 100;
+
 export function createRoute({
   name = 'Untitled route',
   activityType = 'walk',
   loop = false,
   points = [],
   routedGeometry = null,
+  targetSpeedMph = null,
 } = {}) {
+  const cleanActivityType = normalizeActivityType(activityType);
   const route = {
     name: normalizeRouteName(name),
-    activityType: normalizeActivityType(activityType),
+    activityType: cleanActivityType,
+    targetSpeedMph: normalizeTargetSpeedMph(
+      targetSpeedMph,
+      activitySpeedMph(cleanActivityType),
+    ),
     loop,
     points: points.map(normalizePoint),
   };
@@ -48,6 +57,22 @@ export function updateRoute(route, changes = {}) {
       changes.activityType === undefined
         ? route.activityType
         : normalizeActivityType(changes.activityType),
+    targetSpeedMph:
+      changes.targetSpeedMph === undefined
+        ? changes.activityType === undefined
+          ? normalizeTargetSpeedMph(
+              route.targetSpeedMph,
+              activitySpeedMph(route.activityType),
+            )
+          : activitySpeedMph(changes.activityType)
+        : normalizeTargetSpeedMph(
+            changes.targetSpeedMph,
+            activitySpeedMph(
+              changes.activityType === undefined
+                ? route.activityType
+                : changes.activityType,
+            ),
+          ),
     loop: changes.loop === undefined ? route.loop : Boolean(changes.loop),
   };
 
@@ -128,8 +153,15 @@ export function activitySpeedMph(activityType) {
   return ACTIVITY_SPEEDS_MPH[normalizeActivityType(activityType)];
 }
 
+export function routeSpeedMph(route) {
+  return normalizeTargetSpeedMph(
+    route?.targetSpeedMph,
+    activitySpeedMph(route?.activityType),
+  );
+}
+
 export function estimatedDurationMinutes(route) {
-  const speedMph = activitySpeedMph(route.activityType);
+  const speedMph = routeSpeedMph(route);
   if (!speedMph) return 0;
 
   const distanceMiles = totalDistanceMeters(route) / METERS_PER_MILE;
@@ -247,7 +279,6 @@ function normalizePoint(point) {
   };
 }
 
-
 function createRoutePointId() {
   const webCrypto = globalThis.crypto;
 
@@ -352,6 +383,18 @@ function normalizeInteger(value, fallback) {
 function normalizeNonNegativeNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function normalizeTargetSpeedMph(value, fallback) {
+  const number = Number(value);
+  if (
+    Number.isFinite(number) &&
+    number >= MIN_TARGET_SPEED_MPH &&
+    number <= MAX_TARGET_SPEED_MPH
+  ) {
+    return number;
+  }
+  return fallback;
 }
 
 function normalizeDate(value) {

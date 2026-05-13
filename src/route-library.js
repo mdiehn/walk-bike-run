@@ -41,6 +41,7 @@ export function createSavedRoute(
     id,
     name: cleanRoute.name,
     activityType: cleanRoute.activityType,
+    targetSpeedMph: cleanRoute.targetSpeedMph,
     loop: cleanRoute.loop,
     points: cleanRoute.points,
     distanceMeters: routeDistanceMeters(cleanRoute),
@@ -59,6 +60,7 @@ export function savedRouteToRoute(savedRoute) {
   return createRoute({
     name: normalized.name,
     activityType: normalized.activityType,
+    targetSpeedMph: normalized.targetSpeedMph,
     loop: normalized.loop,
     points: normalized.points,
     routedGeometry: normalized.routedGeometry,
@@ -238,6 +240,7 @@ export function normalizeSavedRoute(savedRoute) {
       id: String(savedRoute.id || createId()),
       name: route.name,
       activityType: route.activityType,
+      targetSpeedMph: route.targetSpeedMph,
       loop: route.loop,
       points: route.points,
       distanceMeters: routeDistanceMeters(route),
