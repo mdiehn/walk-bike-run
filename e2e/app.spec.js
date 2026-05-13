@@ -12,19 +12,172 @@ test('loads the route editor shell', async ({ page }) => {
   await expect(page.getByTestId('distance-text')).toHaveText('0.00 mi');
   await expect(page.getByTestId('estimated-time')).toHaveText('0m');
   await expect(page.getByTestId('pace-text')).toHaveText('20:00 m/mi');
-  await expect(page.getByRole('tab', { name: 'Editor' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Following' })).toBeVisible();
+  await expect(page.getByTestId('enter-go-mode')).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Following' }).click();
-  await expect(
-    page.getByText('Following controls will live here.'),
-  ).toBeVisible();
-  await page.getByRole('tab', { name: 'Editor' }).click();
+  await page.getByTestId('enter-go-mode').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText(
+    'Plan a route first',
+  );
+  await page.getByRole('button', { name: 'Plan' }).click();
   await expect(page.getByTestId('undo-route-button')).toBeDisabled();
   await expect(page.getByTestId('redo-route-button')).toBeDisabled();
   await expect(
     page.getByRole('heading', { name: 'Current route backup' }),
   ).toBeVisible();
+});
+
+test('shows first-pass Go mode controls and route-use stats', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await addPointAtMap(page);
+  await addPointAtMap(page);
+  await page.getByTestId('enter-go-mode').click();
+
+  await expect(page.getByTestId('go-primary-action')).toBeFocused();
+  await expect(page.getByTestId('go-route-name')).toHaveText('New route');
+  await expect(page.getByTestId('go-distance-text')).toHaveText('0.00 mi');
+  await expect(page.getByTestId('go-remaining-text')).not.toHaveText('0.00 mi');
+  await expect(page.getByTestId('go-elapsed-text')).toHaveText('0:00');
+  await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
+  await expect(page.getByTestId('go-primary-action')).toBeEnabled();
+  await expect(page.getByTestId('go-primary-action')).toContainText('Start');
+  await expect(page.getByTestId('go-recenter-button')).toBeEnabled();
+
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText(
+    'Moving by estimate',
+  );
+  await expect(page.getByTestId('go-primary-action')).toContainText('Pause');
+
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Paused');
+  await expect(page.getByTestId('go-primary-action')).toContainText('Resume');
+  await expect(page.getByTestId('go-primary-action')).toContainText(
+    'Hold to Finish',
+  );
+
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText(
+    'Moving by estimate',
+  );
+  await expect(page.getByTestId('go-primary-action')).toContainText('Pause');
+
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Paused');
+  await expect(page.getByTestId('go-primary-action')).toContainText('Resume');
+
+  await page.getByTestId('go-primary-action').hover();
+  await page.mouse.down();
+  await page.waitForTimeout(950);
+  await page.mouse.up();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Ready to save');
+  await expect(page.getByTestId('go-primary-action')).toContainText('Done');
+
+  await page.waitForTimeout(550);
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-complete-panel')).toBeVisible();
+  await expect(page.getByTestId('go-complete-route-name')).toHaveText(
+    'New route',
+  );
+  await expect(page.getByTestId('go-complete-distance')).toBeVisible();
+  await expect(page.getByTestId('go-complete-elapsed')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.getByTestId('undo-route-button')).toBeEnabled();
+
+  await page.getByTestId('enter-go-mode').click();
+  await expect(page.getByTestId('go-active-panel')).toBeVisible();
+  await expect(page.getByTestId('go-complete-panel')).toBeHidden();
+  await expect(page.getByTestId('go-primary-action')).toContainText('Start');
+  await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
+});
+
+
+test('uses a collapsed mobile Go dashboard with expandable details', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.goto('/');
+
+  await addPointAtMap(page, { x: 180, y: 180 });
+  await addPointAtMap(page, { x: 310, y: 180 });
+  await page.getByTestId('enter-go-mode').click();
+
+  await expect(page.locator('body')).toHaveClass(/is-go-mode/);
+  await expect(page.getByTestId('map')).toBeVisible();
+  await expect(page.getByTestId('go-dashboard-toggle')).toBeVisible();
+  await expect(page.getByTestId('go-dashboard-toggle')).toContainText(
+    'Show more',
+  );
+  await expect(page.getByTestId('go-primary-action')).toBeVisible();
+  await expect(page.getByTestId('go-distance-text')).toBeVisible();
+  await expect(page.getByTestId('go-elapsed-text')).toBeVisible();
+  await expect(page.getByTestId('go-pace-text')).toBeVisible();
+  await expect(page.getByTestId('go-remaining-text')).toBeHidden();
+  await expect(page.getByTestId('go-progress-text')).toBeHidden();
+  await expect(page.getByTestId('go-dashboard-details')).toBeHidden();
+
+  await page.getByTestId('go-dashboard-toggle').click();
+
+  await expect(page.getByTestId('go-dashboard-toggle')).toContainText(
+    'Show less',
+  );
+  await expect(page.getByTestId('go-route-name')).toBeVisible();
+  await expect(page.getByTestId('go-remaining-text')).toBeVisible();
+  await expect(page.getByTestId('go-progress-text')).toBeVisible();
+  await expect(page.getByTestId('go-time-remaining-text')).toBeVisible();
+  await expect(page.getByTestId('go-recenter-button')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.locator('body')).not.toHaveClass(/is-go-mode/);
+  await expect(page.getByRole('heading', { name: 'Route list' })).toBeVisible();
+});
+
+test('stores manual Go location override settings', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Go mode uses browser location when available.',
+  );
+
+  await page.getByTestId('go-manual-location-enabled').check();
+  await page.getByTestId('go-manual-latitude').fill('43.6426');
+  await page.getByTestId('go-manual-latitude').blur();
+  await page.getByTestId('go-manual-longitude').fill('-72.2518');
+  await page.getByTestId('go-manual-longitude').blur();
+
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Go mode uses the manual location override.',
+  );
+
+  await page.reload();
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await expect(page.getByTestId('go-manual-location-enabled')).toBeChecked();
+  await expect(page.getByTestId('go-manual-latitude')).toHaveValue('43.6426');
+  await expect(page.getByTestId('go-manual-longitude')).toHaveValue('-72.2518');
+});
+
+test('sets manual Go location by picking on the map', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByTestId('pick-go-manual-location').click();
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Tap the map to set your manual Go location.',
+  );
+
+  await page.getByTestId('map').click({ position: { x: 180, y: 180 } });
+
+  await expect(page.getByTestId('go-manual-location-enabled')).toBeChecked();
+  await expect(page.getByTestId('go-manual-latitude')).not.toHaveValue('');
+  await expect(page.getByTestId('go-manual-longitude')).not.toHaveValue('');
+  await expect(page.getByTestId('go-location-status')).toHaveText(
+    'Go mode uses the manual location override.',
+  );
+  await expect(page.getByTestId('point-row')).toHaveCount(0);
 });
 
 test('updates route stats when activity changes', async ({ page }) => {
@@ -35,6 +188,77 @@ test('updates route stats when activity changes', async ({ page }) => {
   await expect(page.getByTestId('pace-text')).toHaveText('10:00 m/mi');
   await page.locator('#activityType').selectOption('bike');
   await expect(page.getByTestId('pace-text')).toHaveText('12.0 mph');
+});
+
+test('uses route target pace and Go pace defaults', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByTestId('target-pace-input')).toHaveValue('20:00');
+  await page.getByTestId('target-pace-input').fill('18:30');
+  await page.getByTestId('target-pace-input').blur();
+  await expect(page.getByTestId('pace-text')).toHaveText('18:30 m/mi');
+
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByTestId('default-run-pace').fill('8:15');
+  await page.getByTestId('default-run-pace').blur();
+
+  await page.getByRole('tab', { name: 'Route' }).click();
+  await page.locator('#activityType').selectOption('run');
+  await expect(page.getByTestId('target-pace-input')).toHaveValue('8:15');
+  await expect(page.getByTestId('pace-text')).toHaveText('8:15 m/mi');
+});
+
+
+test('locks route marker interactions while Go mode is active', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await addPointAtMap(page, { x: 180, y: 180 });
+  await addPointAtMap(page, { x: 320, y: 180 });
+
+  await expect(page.locator('.route-marker-shell').first()).toHaveClass(
+    /leaflet-interactive/,
+  );
+
+  await page.getByTestId('enter-go-mode').click();
+
+  await expect(page.locator('.route-marker-shell').first()).not.toHaveClass(
+    /leaflet-interactive/,
+  );
+
+  await page.getByTestId('map').click({ position: { x: 240, y: 220 } });
+  await expect(page.getByTestId('point-row')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page.locator('.route-marker-shell').first()).toHaveClass(
+    /leaflet-interactive/,
+  );
+
+  await addPointAtMap(page, { x: 240, y: 220 });
+  await expect(page.getByTestId('point-row')).toHaveCount(3);
+});
+
+test('dead-reckons Go movement when live movement input is unavailable', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await page.getByTestId('target-pace-input').fill('1:00');
+  await page.getByTestId('target-pace-input').blur();
+  await addPointAtMap(page, { x: 180, y: 180 });
+  await addPointAtMap(page, { x: 320, y: 180 });
+
+  await page.getByTestId('enter-go-mode').click();
+  await page.getByTestId('go-primary-action').click();
+
+  await expect(page.getByTestId('go-status-text')).toHaveText(
+    'Moving by estimate',
+  );
+  await expect(page.locator('.go-position-source-estimated')).toBeVisible();
+  await expect(page.locator('.go-position-source-label')).toHaveText('est');
+  await expect(page.getByTestId('go-elapsed-text')).not.toHaveText('0:00');
+  await expect(page.getByTestId('go-distance-text')).not.toHaveText('0.00 mi');
 });
 
 test('uses cached routed geometry on reload without routing again', async ({
@@ -60,7 +284,7 @@ test('uses cached routed geometry on reload without routing again', async ({
   await page.goto('/');
 
   await expect(page.getByTestId('distance-text')).toHaveText('1.55 mi');
-  await expect(page.getByTestId('estimated-time')).toHaveText('30m');
+  await expect(page.getByTestId('estimated-time')).toHaveText('31m');
   await expect(page.getByTestId('routing-status')).toHaveText(
     'Routed with OSRM.',
   );
@@ -597,7 +821,7 @@ test('sorts and filters saved routes in the library', async ({ page }) => {
   );
 });
 
-async function addPointAtMap(page) {
+async function addPointAtMap(page, requestedPosition = null) {
   const pointCount = await page.getByTestId('point-row').count();
   const clickPositions = [
     { x: 150, y: 150 },
@@ -605,7 +829,8 @@ async function addPointAtMap(page) {
     { x: 210, y: 260 },
     { x: 320, y: 230 },
   ];
-  const position = clickPositions[pointCount % clickPositions.length];
+  const position =
+    requestedPosition ?? clickPositions[pointCount % clickPositions.length];
 
   await page.getByTestId('map').click({ position });
 }

@@ -217,3 +217,88 @@ Useful updates include:
 - decisions made with Mike
 
 Do not let this file become polished docs. It is a recovery log.
+
+## 2026-05-12 Go estimated movement / target pace pass
+
+Added a route-level target pace/speed concept for Go mode:
+
+- Routes now store `targetSpeedMph`.
+- Walk/run route plan UI shows target pace in min/mi.
+- Bike route plan UI shows target speed in mph.
+- Settings now stores per-activity defaults for walk pace, run pace, and bike speed.
+- Changing a route's activity applies that activity's saved default speed.
+- Saved routes and library backups preserve the target speed.
+
+Added first-pass estimated Go movement:
+
+- When Go is running without live movement input, the Go marker advances along the displayed route using the route target speed.
+- Pause freezes elapsed time and estimated position.
+- Resume continues from the frozen elapsed time.
+- Non-loop routes clamp at the end; loop routes wrap for marker/progress position.
+- Estimated markers get a dashed border, an `est` label, and a larger dark bearing arrow.
+
+Validation run here:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not run in this container because Playwright Chromium is not installed.
+
+Next recommended check:
+
+- Run `npm run test:e2e` locally.
+- Manually test desktop Go mode with and without the Firefox geolocation spoofing extension.
+- Confirm the estimated marker label, dashed border, movement, and arrow heading look right on the real map.
+
+## 2026-05-12 Go marker edit-lockout regression fix
+
+Fixed a regression from the target pace / dead-reckoning pass where desktop route
+markers could still be visually dragged while Go mode was active.
+
+What changed:
+
+- Route markers are rendered draggable/interactable only in Plan mode.
+- Switching between Plan and Go re-renders route markers so existing Leaflet drag
+  handlers do not carry over into Go mode.
+- Map-click route adds are ignored while Go mode is active.
+- Hidden Plan editing controls are guarded against route mutation while Go mode is
+  active.
+- Added e2e coverage that route markers are interactive in Plan, non-interactive
+  in Go, map clicks do not add points in Go, and Plan editing resumes afterward.
+
+## 2026-05-13 Mobile Go dashboard bottom sheet pass
+
+Added a first-pass mobile Go dashboard shell:
+
+- Mobile Go mode now adds a body class so the map can fill the viewport.
+- Page scrolling is disabled while mobile Go mode is active.
+- The normal desktop Go panel remains mostly unchanged.
+- On mobile, the Go panel becomes a bottom dashboard over the map.
+- The dashboard starts collapsed with the main Go button plus covered distance,
+  elapsed time, and pace/speed.
+- The dashboard can expand to show route name, remaining distance, progress,
+  Recenter, estimated time remaining, and a splits placeholder.
+- Switching back to Plan mode removes the Go body class and restores the normal
+  route workspace.
+
+Validation run here:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not run in this container because Playwright Chromium
+  is not installed.
+
+Next recommended check:
+
+- Run `npm run test:e2e` locally.
+- Manually test mobile Go mode on a phone or narrow desktop viewport.
+- Check collapsed/expanded dashboard spacing while moving, paused, and complete.
+
+
+## 2026-05-13 Desktop Go panel scrollbar trim
+
+Trimmed the desktop Go panel spacing after the mobile dashboard pass. The mobile
+bottom-sheet rules are unchanged. On desktop-width Go mode, the side panel now
+has a little more vertical room and slightly tighter internal spacing so expanded
+Go content is less likely to show a small scrollbar.
