@@ -10,200 +10,97 @@ Project: Walk Bike Run
 
 Repo name: `walk-bike-run`
 
-Earlier temporary name: `wbr`
+Current branch target: `dev/v0.5.0-dev`
 
-Current phase: Phase 1, foundation and dev loop.
+Current app version: `0.5.0-dev`
 
-The first scaffold was created as a small Vite + Leaflet app with tests and CI wiring.
+`v0.4.0` is the cutoff for the first Go-mode/activity-following foundation.
 
-Current intent: get the foundation clean before adding route-planning features.
+## v0.4.0 cutoff summary
 
-## Latest session note
+v0.4.0 added the first real Plan / Go split.
 
-Changed routed geometry from an auto-refreshed UI cache into persisted route data:
+What shipped:
 
-- `route.routedGeometry` is normalized with a route key, segments, distance, duration, provider, update time, and `isStale`.
-- Valid cached geometry draws immediately on reload and does not call the routing service.
-- Point/activity/loop edits keep the old geometry as a dashed stale reference and show **Recalculate route**.
-- Manual recalculation replaces the cache, updates routed stats, clears stale geometry state, and persists clean saved-route cache updates when safe.
-- Stale geometry does not replace edited points or point-derived saved stats.
+- Plan mode keeps the existing compact route editor.
+- Go mode provides large activity-focused controls.
+- Go button flow is Start, Pause, Resume, long-press Resume to Done, then tap Done to save/show completion.
+- Completed Go stats are saved as route history.
+- Saved routes receive history directly when possible.
+- Unsaved routes create an Unnamed saved route with history attached.
+- Go mode has a walk/run/bike marker.
+- Go marker color follows action state.
+- Manual Go location override is available in Settings.
+- Recenter looks ahead of the current/estimated position.
+- Route editing is locked while Go mode is active.
+- Routes store target pace/speed.
+- Settings store default walk pace, run pace, and bike speed.
+- Estimated/dead-reckoned movement advances the marker along the route when live movement input is unavailable.
+- Mobile Go mode has a first-pass bottom dashboard.
+- Desktop expanded Go panel can use more viewport height.
 
-Tested:
+Validation reported locally by Mike before the docs/version prep:
 
-- `npm test`
-- `npm run lint`
-- `npm run build`
-- `npm run test:e2e`
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run test:e2e` passed.
+- `npm run build` passed.
 
-Known note:
+## Current v0.5.0 direction
 
-- `npm run format:check` still reports broad pre-existing formatting drift outside this change; touched files were formatted with Prettier.
+Recommended next slice: Go activity/history polish.
 
-Added route-level undo/redo:
+Best first tasks:
 
-- Snapshot stack stores current route, dirty state, and active saved-route linkage before route edits.
-- Undo/Redo buttons live under the main route action row and disable when unavailable.
-- Stack is capped at 50 snapshots.
-- Covered add/undo/redo in Playwright.
+1. Split/lap tracking.
+   - Track mile/km splits during Go mode.
+   - Show simple split rows in the expanded dashboard.
+   - Save split data into completed route history.
 
-Tested again:
+2. Better completion and history display.
+   - Show route history more clearly in the library.
+   - Add a selected-history or route-history detail area.
+   - Make Done/completion stats easier to review.
 
-- `npm test`
-- `npm run lint`
-- `npm run build`
-- `npm run test:e2e`
+3. Pause/finish control polish.
+   - On Pause, split the main button area into two buttons.
+   - Resume on the right immediately resumes.
+   - Hold to Finish on the left changes the flow toward Done.
+   - Resume returns to the single Pause button.
+   - Finish replaces the two-button layout with Done.
 
-Fixed two-point loop routes:
+4. Dashboard polish.
+   - Replace the splits placeholder after splits exist.
+   - Improve estimated time remaining and remaining distance display.
+   - Keep mobile Go mode usable first, but do not regress desktop.
 
-- Loop return legs now apply with at least two points in distance stats, routing legs, plotting fallback geometry, and GPX export/import.
-- Added unit coverage for two-point loop distance, routing return legs, and GPX round-trip.
-- Re-ran `npm test`, `npm run lint`, `npm run build`, and `npm run test:e2e`.
+5. Testing/dev helpers.
+   - Use Firefox geolocation spoofing for manual testing when useful.
+   - Consider a small movement replay/dev helper only if manual testing becomes too painful.
+   - Avoid exact-pixel Leaflet assertions when app-state or coarse behavior checks will do.
 
-## Current product idea
+Defer:
 
-Build a browser webapp for planning walking, biking, and running routes.
+- Full heading-up map rotation. Leaflet does not support this natively; this needs a separate design/dependency decision.
+- Full GPS track recording. Current Go mode saves stats/history but does not yet store a true recorded track.
+- Service worker/PWA/offline caching.
 
-The interaction model is inspired by Portal Route, because Portal Route is already easier to use for route planning than the MapMyRun / MapMyFitness apps.
-
-The app should use an OpenStreetMap-compatible base map instead of IITC.
-
-Early target:
-
-> Portal Route, but without portals: a personal walking/biking/running route planner on Leaflet.
-
-## Current technical direction
-
-Use:
-
-- Vite
-- Leaflet
-- Plain JavaScript for now
-- npm scripts
-- Vitest or similar unit tests
-- Playwright smoke tests
-- GitHub Actions
-
-Avoid for now:
-
-- Service worker
-- PWA offline caching
-- Backend
-- Account system
-- Cloud sync
-- GPS recording
-- Routing engine
-
-These can come later after the local app and update loop are solid.
-
-## Decisions so far
-
-- Repo should be named `walk-bike-run`, not just `wbr`.
-- `wbr` is still fine as a short internal app id.
-- Phase 1 should focus on foundation and dev loop, not route features.
-- Update behavior is a first-class feature.
-- Service worker/PWA support should wait until stale-cache behavior is deliberately designed.
-- Portal Route ideas should be reused, but IITC/Ingress-specific code should not drive this app's structure.
-
-## Current roadmap summary
-
-Phase 1: Foundation and dev loop
-
-- Vite app shell
-- Leaflet map
-- version display
-- npm scripts
-- tests
-- GitHub Actions
-- README/CHANGELOG
-
-Phase 2: Basic route editing
-
-- click to add points
-- route list
-- delete/rename/drag/reorder points
-- clear route
-- loop route
-- straight-line distance
-
-Phase 3: Local route library
-
-- save/load/duplicate/delete/rename routes
-- localStorage or IndexedDB
-- route metadata
-
-Phase 4: Import/export
-
-- GPX
-- GeoJSON
-- simple backup JSON
-- fixture tests
-
-Phase 5: Road/path routing
-
-- routing provider adapter
-- walk/bike/run profiles
-- routed polyline and routed distance
-
-Phase 6: Mobile polish
-
-- touch controls
-- current location
-- compact panel/bottom sheet
-- phone testing over LAN
-
-Phase 7: Activity planning features
-
-- estimated time
-- pace
-- activity defaults
-- distance targets
-
-Phase 8: PWA/installable app
-
-- service worker
-- offline shell
-- update handling
-- cache debug controls
-
-Phase 9: GPS recording
-
-- record actual activities
-- save completed activity
-- export GPX
-
-Phase 10: 1.0.0
-
-- stable personal route planner
-
-## Immediate next steps
-
-1. Add these documentation files:
-   - `ROADMAP.md`
-   - `AGENTS.md`
-   - `SESSION.md`
-
-2. Confirm Phase 1 scaffold still works:
+## Useful validation commands
 
 ```sh
-npm install
 npm run lint
 npm test
-npm run build
-npx playwright install chromium
 npm run test:e2e
+npm run build
 ```
 
-3. Commit the docs update.
+Install Playwright Chromium before the first e2e run on a fresh machine:
 
-Suggested commit message:
-
-```text
-Document roadmap and agent workflow
+```sh
+npx playwright install chromium
 ```
 
-4. After Phase 1 is clean, start Phase 2 with basic route editing.
-
-## Notes for Mira
+## Notes for Miri
 
 Please keep this file updated while you work.
 
@@ -217,88 +114,3 @@ Useful updates include:
 - decisions made with Mike
 
 Do not let this file become polished docs. It is a recovery log.
-
-## 2026-05-12 Go estimated movement / target pace pass
-
-Added a route-level target pace/speed concept for Go mode:
-
-- Routes now store `targetSpeedMph`.
-- Walk/run route plan UI shows target pace in min/mi.
-- Bike route plan UI shows target speed in mph.
-- Settings now stores per-activity defaults for walk pace, run pace, and bike speed.
-- Changing a route's activity applies that activity's saved default speed.
-- Saved routes and library backups preserve the target speed.
-
-Added first-pass estimated Go movement:
-
-- When Go is running without live movement input, the Go marker advances along the displayed route using the route target speed.
-- Pause freezes elapsed time and estimated position.
-- Resume continues from the frozen elapsed time.
-- Non-loop routes clamp at the end; loop routes wrap for marker/progress position.
-- Estimated markers get a dashed border, an `est` label, and a larger dark bearing arrow.
-
-Validation run here:
-
-- `npm run lint` passed.
-- `npm test` passed.
-- `npm run build` passed.
-- `npm run test:e2e` could not run in this container because Playwright Chromium is not installed.
-
-Next recommended check:
-
-- Run `npm run test:e2e` locally.
-- Manually test desktop Go mode with and without the Firefox geolocation spoofing extension.
-- Confirm the estimated marker label, dashed border, movement, and arrow heading look right on the real map.
-
-## 2026-05-12 Go marker edit-lockout regression fix
-
-Fixed a regression from the target pace / dead-reckoning pass where desktop route
-markers could still be visually dragged while Go mode was active.
-
-What changed:
-
-- Route markers are rendered draggable/interactable only in Plan mode.
-- Switching between Plan and Go re-renders route markers so existing Leaflet drag
-  handlers do not carry over into Go mode.
-- Map-click route adds are ignored while Go mode is active.
-- Hidden Plan editing controls are guarded against route mutation while Go mode is
-  active.
-- Added e2e coverage that route markers are interactive in Plan, non-interactive
-  in Go, map clicks do not add points in Go, and Plan editing resumes afterward.
-
-## 2026-05-13 Mobile Go dashboard bottom sheet pass
-
-Added a first-pass mobile Go dashboard shell:
-
-- Mobile Go mode now adds a body class so the map can fill the viewport.
-- Page scrolling is disabled while mobile Go mode is active.
-- The normal desktop Go panel remains mostly unchanged.
-- On mobile, the Go panel becomes a bottom dashboard over the map.
-- The dashboard starts collapsed with the main Go button plus covered distance,
-  elapsed time, and pace/speed.
-- The dashboard can expand to show route name, remaining distance, progress,
-  Recenter, estimated time remaining, and a splits placeholder.
-- Switching back to Plan mode removes the Go body class and restores the normal
-  route workspace.
-
-Validation run here:
-
-- `npm run lint` passed.
-- `npm test` passed.
-- `npm run build` passed.
-- `npm run test:e2e` could not run in this container because Playwright Chromium
-  is not installed.
-
-Next recommended check:
-
-- Run `npm run test:e2e` locally.
-- Manually test mobile Go mode on a phone or narrow desktop viewport.
-- Check collapsed/expanded dashboard spacing while moving, paused, and complete.
-
-
-## 2026-05-13 Desktop Go panel scrollbar trim
-
-Trimmed the desktop Go panel spacing after the mobile dashboard pass. The mobile
-bottom-sheet rules are unchanged. On desktop-width Go mode, the side panel now
-has a little more vertical room and slightly tighter internal spacing so expanded
-Go content is less likely to show a small scrollbar.

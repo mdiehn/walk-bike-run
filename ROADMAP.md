@@ -7,235 +7,143 @@ The goal is not to clone MapMyRun or MapMyFitness feature-for-feature. The goal 
 ## Guiding principles
 
 - Keep the app easy to run locally.
-- Keep the dev/test/release loop clean from the start.
+- Keep the dev/test/release loop clean.
 - Prefer boring, reviewable changes.
 - Avoid stale-cache and update confusion.
 - Do not add a backend until local app behavior is solid.
 - Do not add a service worker until update behavior is well understood.
 - Reuse Portal Route ideas, but do not blindly copy IITC-specific structure.
 
-## Phase 1: Foundation and dev loop
+## Released / completed milestones
 
-Status: started.
-
-Goal: make the repo pleasant to work in before app complexity starts.
-
-Deliverables:
+### v0.1.0: Foundation and dev loop
 
 - Vite app shell
-- Leaflet map loads
+- Leaflet map
 - OpenStreetMap-compatible tile layer
-- Small version display in dev mode
-- `npm` scripts for dev, build, preview, test, lint, and format
+- Version display
+- npm dev/build/test/lint scripts
 - Unit test framework
-- Playwright smoke test
-- GitHub Actions build/test workflow
-- `README.md`
-- `CHANGELOG.md`
-- No service worker
-- No PWA offline cache
-- No backend
+- Playwright smoke tests
+- GitHub Actions build/test/deploy plumbing
+- No service worker or PWA cache
 
-Close this phase when:
+### v0.2.0: Basic route editing and local route library
 
-- Repo is named `walk-bike-run`
-- Repo is pushed
-- CI passes
-- README matches reality
-- One clean initial tag/release exists, likely `v0.1.0`
-
-## Phase 2: Basic route editing
-
-Goal: make the app useful as a manual route sketcher.
-
-Features:
-
-- Click map to add route points
-- Show points in a route list
-- Delete points
-- Rename points
-- Drag points on map
-- Reorder points in list
-- Show total straight-line distance
+- Click/tap map to add route points
+- Route point list
+- Rename, delete, drag, and reorder points
 - Clear route
 - Loop route toggle
-
-Notes:
-
-- No routing engine yet.
-- No road/path snapping yet.
-- Keep editing fast and predictable.
-
-Likely version: `v0.2.0`
-
-## Phase 3: Local route library
-
-Goal: save and reuse routes.
-
-Features:
-
-- Save current route
-- Load saved route
-- Duplicate route
-- Delete saved route
-- Rename saved route
-- Store routes in `localStorage` or IndexedDB
-- Maybe store map center and zoom
-
-Route metadata:
-
-- Name
-- Activity type: walk, bike, or run
-- Created date
-- Updated date
-- Distance
-- Loop/non-loop
-
-Likely version: `v0.3.0`
-
-## Phase 4: Import/export
-
-Goal: make routes portable.
-
-Features:
-
-- Export GPX
-- Import GPX
-- Export GeoJSON
-- Import GeoJSON
-- Maybe export simple JSON backup
-- Drag/drop file import
-- Route fixture files for tests
-
-Likely version: `v0.4.0`
-
-## Phase 5: Road/path routing
-
-Goal: convert point-to-point sketches into real walk/bike/run paths.
-
-Features:
-
-- Routing provider adapter
-- Profile selector:
-  - walk
-  - bike
-  - run, probably same as walk at first
-- Route polyline from routing service
-- Routed distance vs straight-line distance
-- Recalculate when points move
-- Clear fallback behavior when routing fails
-
-Possible routing engines/providers to evaluate:
-
-- OSRM
-- GraphHopper
-- Valhalla
-- Hosted routing APIs
-- Self-hosted routing later if worthwhile
-
-Notes:
-
-- Start with one provider adapter.
-- Do not overbuild provider abstraction before we have one working provider.
-- Treat routing failure as normal and recoverable.
-
-Likely version: `v0.5.0`
-
-## Phase 6: Mobile-first polish
-
-Goal: make the app genuinely usable on a phone.
-
-Features:
-
-- Better touch controls
-- Current location button
-- Start-here action
-- Larger hit targets
-- Compact route list
-- Bottom-sheet style panel
-- Prevent accidental map movement while editing
-- Phone testing over LAN
-
-Likely version: `v0.6.0`
-
-## Phase 7: Activity planning features
-
-Goal: replace the parts of MapMyRun and MapMyFitness we actually care about.
-
-Features:
-
+- Straight-line distance
 - Estimated time
-- Pace display
-- Activity type defaults
-- Distance targets
-- Maybe extend route to about N miles
-- Printable/shareable route summary
+- Local browser route library
+- Save/load/duplicate/delete routes
+- Current-route JSON and GPX import/export
+- Library backup import/export
 
-Notes:
+### v0.3.0: Routing, cached geometry, Drive backup, and compact editor polish
 
-- Elevation is useful, but not required here.
-- Social features are not a goal unless we decide otherwise later.
+- Route, Library, and Settings tabs
+- OSRM / configured routing Worker support
+- Replot flow for routed geometry
+- Cached routed geometry reuse
+- Stale routed geometry display after edits
+- Undo/Redo
+- Add/Del point tap mode
+- Google Drive library backup/restore
+- Improved route dirty/stale handling
+- Mobile add-point fixes
+- Two-point loop fixes
 
-Likely version: `v0.7.0`
+### v0.4.0: Go mode and activity-following foundation
 
-## Phase 8: PWA / installable app
+- Plan / Go mode split
+- Go button state machine: Start, Pause, Resume, hold-to-finish, Done
+- Completed Go stats saved as route history
+- Go position marker for walk/run/bike
+- Manual Go location override
+- Recenter look-ahead behavior
+- Route editing locked while Go mode is active
+- Route-level target pace/speed
+- Per-activity default pace/speed settings
+- Estimated/dead-reckoned Go movement when live movement input is unavailable
+- Mobile Go dashboard bottom sheet
 
-Goal: make the app feel app-like without causing update misery.
+## Current target: v0.5.0-dev
 
-Features:
+Goal: turn the v0.4.0 Go foundation into a more useful activity screen and history view without making the app harder to maintain.
 
-- Installable PWA
-- Service worker
-- Offline app shell
-- Careful cache/version handling
-- Visible update-available behavior
-- Cache clearing/debug controls
+Good first slices:
 
-Important:
+1. **Split/lap tracking**
+   - Track mile/km splits during Go mode.
+   - Show simple split rows in the expanded dashboard.
+   - Save split data into completed route history.
+
+2. **Better completion and history display**
+   - Show completed activity history more clearly in the route library.
+   - Add a simple route-history detail view or selected-history display.
+   - Make completion stats easier to review after Done.
+
+3. **Pause/finish control polish**
+   - On Pause, split the main button area into Resume and Hold to Finish.
+   - Resume should immediately return to the single Pause button.
+   - Hold to Finish should change the flow to Done.
+
+4. **Dashboard polish**
+   - Improve mobile collapsed/expanded dashboard spacing.
+   - Replace the splits placeholder with real data once splits exist.
+   - Improve estimated time remaining and distance remaining display.
+
+5. **Testing and dev helpers**
+   - Add a small movement replay/simulator only if manual testing becomes painful.
+   - Prefer app-state and helper tests over brittle exact-pixel map assertions.
+
+Defer for now:
+
+- Full heading-up map rotation. Leaflet does not support map rotation natively, so this needs a separate dependency/design decision.
+- Full GPS track recording. Go mode has stats/history, but not a complete recorded track model yet.
+- PWA/offline support.
+
+## Later targets
+
+### v0.6.0: GPS recording and activity export
+
+- Record live GPS track points.
+- Separate planned route from actual recorded activity.
+- Save completed activity track data.
+- Export completed activity GPX.
+- Consider moving time vs elapsed time.
+
+### v0.7.0: More route planning helpers
+
+- Distance targets.
+- Extend route to about N miles/km.
+- Printable/shareable route summary.
+- Better destination/share controls for downloads.
+- Optional elevation research.
+
+### v0.8.0: PWA / installable app
+
+- Installable PWA.
+- Service worker.
+- Offline app shell.
+- Careful cache/version handling.
+- Visible update-available behavior.
+- Cache clearing/debug controls.
 
 Do this late, not early. Service workers are useful, but they can cause confusing stale-version behavior if added before the app and release process are stable.
 
-Likely version: `v0.8.0`
-
-## Phase 9: GPS recording
-
-Goal: record actual walks, rides, and runs.
-
-Features:
-
-- Start/stop recording
-- GPS track capture
-- Elapsed time
-- Moving time, maybe later
-- Pace/speed
-- Save completed activity
-- Export completed activity as GPX
-
-Likely version: `v0.9.0`
-
-## Phase 10: 1.0.0
+### v1.0.0
 
 Goal: stable personal route planner.
 
-Call this `1.0.0` when:
+Rough requirements:
 
-- Route editing is solid
-- Save/load is solid
-- GPX import/export works
-- Phone use is good
-- Update behavior is understood
-- There are no scary data-loss bugs
-
-## Later ideas
-
-These are deliberately not part of the early phases:
-
-- Account system
-- Cloud sync
-- Shared route libraries
-- Multi-user editing
-- Turn-by-turn navigation
-- Live activity sharing
-- Social feed
-- Complex training plans
-- Wearable integration
+- Route editing is reliable on desktop and mobile.
+- Saved route library is trustworthy.
+- Import/export works.
+- Routing failures are recoverable and understandable.
+- Go mode is useful for personal activity following.
+- Update/release behavior is boring.

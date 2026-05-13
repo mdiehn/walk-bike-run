@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-## v0.4.0-dev - In progress
+Development has moved to `0.5.0-dev`. Planned focus:
+
+- Split/lap tracking in Go mode.
+- Better completion and route-history display.
+- Pause/Resume/Finish control polish.
+- Mobile dashboard polish.
+- Optional movement replay/dev helper if manual testing becomes painful.
+
+## v0.4.0 - 2026-05-13
 
 ### Added
 
