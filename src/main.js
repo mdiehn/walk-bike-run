@@ -1401,7 +1401,12 @@ function renderGoMode() {
   );
   elements.goPrimaryAction.classList.add(buttonState.className);
   elements.goRecenter.disabled = route.points.length === 0;
-  renderGoCompleteStats();
+
+  if (showCompletePanel) {
+    renderGoCompleteStats();
+  } else {
+    clearGoCompleteStats();
+  }
 }
 
 function getGoRemainingMinutes(remainingMeters) {
@@ -1566,6 +1571,11 @@ function renderGoCompleteStats() {
   elements.goCompletePace.textContent = stats.pace;
   renderGoSplits(elements.goCompleteSplitsList, stats.splits ?? []);
   elements.goCompleteSplits.hidden = !stats.splits?.length;
+}
+
+function clearGoCompleteStats() {
+  elements.goCompleteSplits.hidden = true;
+  elements.goCompleteSplitsList.replaceChildren();
 }
 
 function getCurrentGoSplits(coveredMeters, elapsedSeconds) {

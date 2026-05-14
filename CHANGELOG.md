@@ -19,6 +19,7 @@ Development has moved to `0.5.0-dev`. Planned focus:
 
 ### Changed
 
+- Kept hidden Go completion split rows cleared until the completion panel is shown, avoiding duplicate split test IDs during active sessions.
 - Tightened the expanded Go dashboard control layout so the main action and secondary controls share a compact three-column row.
 - Tightened the expanded mobile Go dashboard stats into two compact three-column rows:
   - distance, elapsed, and pace/speed

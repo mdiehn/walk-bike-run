@@ -4,6 +4,24 @@ This file is a working-session backup. It should help recover context if VSCodiu
 
 Update it freely while working. It is allowed to be messier than `README.md` or `ROADMAP.md`.
 
+## Latest session update - Go splits e2e toggle fix
+
+Changed:
+
+- Removed the mobile-only dashboard toggle click from the automatic Go mile splits e2e test.
+- The split test now works in the default desktop viewport, where the bottom-sheet toggle is intentionally hidden and the splits panel is already visible.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not complete in this container because Playwright Chromium is missing at `/home/oai/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell`.
+
+Next recommended step:
+
+- Run `npm run test:e2e` locally where Playwright Chromium is installed.
+
 ## Latest session update - Mobile Go dashboard stats
 
 Changed:
@@ -163,6 +181,10 @@ Install Playwright Chromium before the first e2e run on a fresh machine:
 ```sh
 npx playwright install chromium
 ```
+
+## Current note
+
+- Fixed the Go split e2e duplicate-row failure by clearing hidden completion split rows while the completion panel is hidden. The active dashboard split list remains the only source of `go-split-row` test IDs until Done/complete is shown.
 
 ## Notes for Miri
 

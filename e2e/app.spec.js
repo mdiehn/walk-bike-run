@@ -283,7 +283,6 @@ test('shows and saves automatic Go mile splits', async ({ page }) => {
 
   await page.goto('/');
   await page.getByTestId('enter-go-mode').click();
-  await page.getByTestId('go-dashboard-toggle').click();
   await page.getByTestId('go-primary-action').click();
 
   await page.clock.fastForward(37_000);
