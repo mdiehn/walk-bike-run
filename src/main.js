@@ -226,10 +226,18 @@ app.innerHTML = `
                 <span class="go-stat-label">Remaining</span>
                 <strong id="goRemainingText" data-testid="go-remaining-text">0.00 mi</strong>
               </div>
+              <div class="go-stat-card">
+                <span class="go-stat-label">Est. remaining</span>
+                <strong id="goTimeRemainingText" data-testid="go-time-remaining-text">0m</strong>
+              </div>
+              <div class="go-stat-card go-status-card">
+                <span class="go-stat-label">Status</span>
+                <strong id="goStatusText" data-testid="go-status-text">Ready to go</strong>
+              </div>
             </div>
             <div class="go-progress" aria-label="Route progress">
               <div class="go-progress-text">
-                <span id="goStatusText" data-testid="go-status-text">Ready to go</span>
+                <span>Progress</span>
                 <strong id="goProgressText" data-testid="go-progress-text">0%</strong>
               </div>
               <div class="go-progress-track" aria-hidden="true">
@@ -237,10 +245,6 @@ app.innerHTML = `
               </div>
             </div>
             <div id="goDashboardDetails" class="go-dashboard-details" data-testid="go-dashboard-details">
-              <div class="go-detail-card">
-                <span class="go-stat-label">Est. remaining</span>
-                <strong id="goTimeRemainingText" data-testid="go-time-remaining-text">0m</strong>
-              </div>
               <div class="go-detail-card go-splits-card">
                 <span class="go-stat-label">Splits</span>
                 <div id="goSplitsList" class="go-splits-list" data-testid="go-splits-list">

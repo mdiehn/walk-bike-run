@@ -4,6 +4,48 @@ This file is a working-session backup. It should help recover context if VSCodiu
 
 Update it freely while working. It is allowed to be messier than `README.md` or `ROADMAP.md`.
 
+## Latest session update - Mobile Go dashboard stats
+
+Changed:
+
+- Promoted estimated remaining time and Go status into the main Go stats grid.
+- Expanded mobile Go mode now shows two compact three-column stat rows:
+  - distance, elapsed, pace/speed
+  - remaining, estimated remaining, status
+- Collapsed mobile Go mode still shows only the first row plus the main action.
+- Progress and splits remain in the expanded panel below the compact stats.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not complete in this container because Playwright Chromium is missing at `/home/oai/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell`.
+
+Next recommended step:
+
+- Run `npm run test:e2e` locally where Playwright Chromium is installed.
+- Check the expanded panel on a phone-size viewport to make sure the status text is readable.
+
+## Latest session update - Go dashboard controls
+
+Changed:
+
+- The expanded Go dashboard control row now uses a compact three-column grid.
+- The primary Go action spans two columns and secondary controls use one column, reducing stacked-button vertical waste.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not complete in this container because Playwright Chromium is missing and `npx playwright install chromium` failed with DNS errors for `cdn.playwright.dev`.
+
+Next recommended step:
+
+- Run `npm run test:e2e` locally where Playwright Chromium is installed.
+- Review the expanded mobile Go panel locally to confirm the tighter control row feels right on a real phone.
+
 ## Latest session update - Go splits
 
 Changed:

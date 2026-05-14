@@ -17,6 +17,13 @@ Development has moved to `0.5.0-dev`. Planned focus:
   - Completed Go stats now save splits into route history.
   - The completion screen shows saved splits when any were recorded.
 
+### Changed
+
+- Tightened the expanded Go dashboard control layout so the main action and secondary controls share a compact three-column row.
+- Tightened the expanded mobile Go dashboard stats into two compact three-column rows:
+  - distance, elapsed, and pace/speed
+  - remaining distance, estimated remaining time, and movement/status
+
 ## v0.4.0 - 2026-05-13
 
 ### Added

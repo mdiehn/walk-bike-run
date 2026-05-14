@@ -115,6 +115,8 @@ test('uses a collapsed mobile Go dashboard with expandable details', async ({
   await expect(page.getByTestId('go-elapsed-text')).toBeVisible();
   await expect(page.getByTestId('go-pace-text')).toBeVisible();
   await expect(page.getByTestId('go-remaining-text')).toBeHidden();
+  await expect(page.getByTestId('go-time-remaining-text')).toBeHidden();
+  await expect(page.getByTestId('go-status-text')).toBeHidden();
   await expect(page.getByTestId('go-progress-text')).toBeHidden();
   await expect(page.getByTestId('go-dashboard-details')).toBeHidden();
 
@@ -125,8 +127,9 @@ test('uses a collapsed mobile Go dashboard with expandable details', async ({
   );
   await expect(page.getByTestId('go-route-name')).toBeVisible();
   await expect(page.getByTestId('go-remaining-text')).toBeVisible();
-  await expect(page.getByTestId('go-progress-text')).toBeVisible();
   await expect(page.getByTestId('go-time-remaining-text')).toBeVisible();
+  await expect(page.getByTestId('go-status-text')).toBeVisible();
+  await expect(page.getByTestId('go-progress-text')).toBeVisible();
   await expect(page.getByTestId('go-recenter-button')).toBeVisible();
 
   await page.getByRole('button', { name: 'Plan' }).click();
