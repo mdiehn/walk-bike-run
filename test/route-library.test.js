@@ -7,7 +7,9 @@ import {
 } from '../src/route-model.js';
 import {
   addRouteHistoryEntry,
+  clearRouteHistory,
   createSavedRoute,
+  deleteRouteHistoryEntry,
   deleteSavedRoute,
   duplicateSavedRoute,
   loadRouteLibrary,
@@ -307,6 +309,64 @@ describe('route library', () => {
     expect(result.library[0].history[0].routeSnapshot.name).toBe(
       'Unnamed route',
     );
+  });
+
+  it('deletes one Go history entry from a saved route', () => {
+    const savedRoute = createSavedRoute(createRoute({ name: 'History route' }), {
+      id: 'saved-a',
+      now: '2026-05-03T12:00:00.000Z',
+    });
+    const withFirst = addRouteHistoryEntry([savedRoute], savedRouteToRoute(savedRoute), {
+      savedRouteId: 'saved-a',
+      now: '2026-05-08T12:00:00.000Z',
+      stats: {
+        elapsedSeconds: 600,
+        completedAt: '2026-05-08T12:00:00.000Z',
+      },
+    }).library;
+    const withSecond = addRouteHistoryEntry(withFirst, savedRouteToRoute(savedRoute), {
+      savedRouteId: 'saved-a',
+      now: '2026-05-09T12:00:00.000Z',
+      stats: {
+        elapsedSeconds: 700,
+        completedAt: '2026-05-09T12:00:00.000Z',
+      },
+    }).library;
+
+    const deleted = deleteRouteHistoryEntry(
+      withSecond,
+      'saved-a',
+      withSecond[0].history[0].id,
+      { now: '2026-05-10T12:00:00.000Z' },
+    );
+
+    expect(deleted[0].history).toHaveLength(1);
+    expect(deleted[0].history[0].finishedAt).toBe(
+      '2026-05-08T12:00:00.000Z',
+    );
+    expect(deleted[0].updatedAt).toBe('2026-05-10T12:00:00.000Z');
+  });
+
+  it('clears Go history from one saved route', () => {
+    const savedRoute = createSavedRoute(createRoute({ name: 'History route' }), {
+      id: 'saved-a',
+      now: '2026-05-03T12:00:00.000Z',
+    });
+    const result = addRouteHistoryEntry([savedRoute], savedRouteToRoute(savedRoute), {
+      savedRouteId: 'saved-a',
+      now: '2026-05-08T12:00:00.000Z',
+      stats: {
+        elapsedSeconds: 600,
+        completedAt: '2026-05-08T12:00:00.000Z',
+      },
+    });
+
+    const cleared = clearRouteHistory(result.library, 'saved-a', {
+      now: '2026-05-10T12:00:00.000Z',
+    });
+
+    expect(cleared[0].history).toEqual([]);
+    expect(cleared[0].updatedAt).toBe('2026-05-10T12:00:00.000Z');
   });
 
   it('deletes saved routes without reordering the remaining routes', () => {

@@ -222,8 +222,56 @@ export function deleteSavedRoute(library, savedRouteId) {
     .filter(Boolean);
 }
 
+export function deleteRouteHistoryEntry(
+  library,
+  savedRouteId,
+  historyEntryId,
+  { now = new Date().toISOString() } = {},
+) {
+  return updateSavedRouteHistory(library, savedRouteId, {
+    now,
+    updateHistory: (history) =>
+      history.filter((entry) => entry.id !== historyEntryId),
+  });
+}
+
+export function clearRouteHistory(
+  library,
+  savedRouteId,
+  { now = new Date().toISOString() } = {},
+) {
+  return updateSavedRouteHistory(library, savedRouteId, {
+    now,
+    updateHistory: () => [],
+  });
+}
+
 export function getSavedRoute(library, savedRouteId) {
   return library.find((entry) => entry.id === savedRouteId) ?? null;
+}
+
+function updateSavedRouteHistory(
+  library,
+  savedRouteId,
+  { now = new Date().toISOString(), updateHistory },
+) {
+  const routeIndex = library.findIndex((entry) => entry.id === savedRouteId);
+  if (routeIndex === -1) return library.map(normalizeSavedRoute).filter(Boolean);
+
+  const savedRoute = normalizeSavedRoute(library[routeIndex]);
+  if (!savedRoute) return library.map(normalizeSavedRoute).filter(Boolean);
+
+  const nextHistory = updateHistory(savedRoute.history).map((entry) => ({
+    ...entry,
+  }));
+  const nextLibrary = [...library];
+  nextLibrary[routeIndex] = {
+    ...savedRoute,
+    history: nextHistory,
+    updatedAt: normalizeDate(now),
+  };
+
+  return nextLibrary.map(normalizeSavedRoute).filter(Boolean);
 }
 
 export function normalizeSavedRoute(savedRoute) {

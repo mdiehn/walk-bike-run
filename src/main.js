@@ -18,7 +18,9 @@ import {
 } from './route-model.js';
 import {
   addRouteHistoryEntry,
+  clearRouteHistory,
   createSavedRoute,
+  deleteRouteHistoryEntry,
   deleteSavedRoute,
   getSavedRoute,
   loadRouteLibrary,
@@ -93,6 +95,7 @@ let libraryNameFilter = '';
 let libraryDistanceFilter = 'all';
 let libraryDurationFilter = 'all';
 let activeLibraryFilterKey = null;
+let expandedRouteHistoryIds = new Set();
 let activeSavedRouteId =
   persistedAppState.activeSavedRouteId &&
   getSavedRoute(routeLibrary, persistedAppState.activeSavedRouteId)
@@ -1268,6 +1271,54 @@ function removeSavedRoute(savedRouteId) {
   }
   persistLibrary();
   renderRoute();
+}
+
+function removeSavedRouteHistoryEntry(savedRouteId, historyEntryId) {
+  const savedRoute = getSavedRoute(routeLibrary, savedRouteId);
+  if (!savedRoute) return;
+
+  const shouldDelete = window.confirm(
+    `Delete this Go history entry from "${savedRoute.name}"?`,
+  );
+  if (!shouldDelete) return;
+
+  routeLibrary = deleteRouteHistoryEntry(
+    routeLibrary,
+    savedRouteId,
+    historyEntryId,
+  );
+
+  const updatedRoute = getSavedRoute(routeLibrary, savedRouteId);
+  if (updatedRoute?.history?.length) {
+    expandedRouteHistoryIds.add(savedRouteId);
+  } else {
+    expandedRouteHistoryIds.delete(savedRouteId);
+  }
+
+  persistLibrary();
+  renderLibraryList();
+}
+
+function clearSavedRouteHistory(savedRouteId) {
+  const savedRoute = getSavedRoute(routeLibrary, savedRouteId);
+  if (!savedRoute) return;
+
+  const historyCount = Array.isArray(savedRoute.history)
+    ? savedRoute.history.length
+    : 0;
+  if (!historyCount) return;
+
+  const shouldClear = window.confirm(
+    `Clear all ${historyCount} Go histor${
+      historyCount === 1 ? 'y entry' : 'y entries'
+    } from "${savedRoute.name}"?`,
+  );
+  if (!shouldClear) return;
+
+  routeLibrary = clearRouteHistory(routeLibrary, savedRouteId);
+  expandedRouteHistoryIds.delete(savedRouteId);
+  persistLibrary();
+  renderLibraryList();
 }
 
 function updateSavedRouteFromCurrent(savedRouteId) {
@@ -2559,24 +2610,35 @@ function getLatestRouteHistoryEntry(savedRoute) {
 
 function renderSavedRouteHistory(savedRoute) {
   const history = Array.isArray(savedRoute.history) ? savedRoute.history : [];
-  if (!history.length) return '';
+  if (!history.length) {
+    expandedRouteHistoryIds.delete(savedRoute.id);
+    return '';
+  }
+
+  const isExpanded = expandedRouteHistoryIds.has(savedRoute.id);
 
   return `
-    <details class="saved-route-history" data-testid="saved-route-history">
+    <details class="saved-route-history" data-route-history-id="${escapeAttr(savedRoute.id)}" data-testid="saved-route-history" ${isExpanded ? 'open' : ''}>
       <summary>${history.length} completed ${history.length === 1 ? 'activity' : 'activities'}</summary>
+      <div class="saved-route-history-actions">
+        <button type="button" class="small-button danger" data-clear-route-history="${escapeAttr(savedRoute.id)}" aria-label="Clear Go history for ${escapeAttr(savedRoute.name)}">Clear Go history</button>
+      </div>
       <ol class="saved-route-history-list">
-        ${history.map(renderSavedRouteHistoryEntry).join('')}
+        ${history
+          .map((entry) => renderSavedRouteHistoryEntry(entry, savedRoute))
+          .join('')}
       </ol>
     </details>
   `;
 }
 
-function renderSavedRouteHistoryEntry(entry) {
+function renderSavedRouteHistoryEntry(entry, savedRoute) {
   return `
     <li class="saved-route-history-row" data-testid="saved-route-history-row">
       <div class="saved-route-history-main">
         <time datetime="${escapeAttr(entry.finishedAt)}">${formatDate(entry.finishedAt)}</time>
         <span data-testid="saved-route-history-completion">${formatRouteHistoryCompletion(entry)}</span>
+        <button type="button" class="saved-route-history-delete" data-delete-route-history="${escapeAttr(savedRoute.id)}" data-history-entry-id="${escapeAttr(entry.id)}" aria-label="Delete this Go history entry">×</button>
       </div>
       ${renderSavedRouteHistorySplits(entry)}
     </li>
@@ -3721,6 +3783,22 @@ elements.pointList.addEventListener('change', (event) => {
   markRouteDirty();
 });
 
+
+elements.savedRouteList.addEventListener(
+  'toggle',
+  (event) => {
+    const details = event.target.closest('[data-route-history-id]');
+    if (!details) return;
+
+    if (details.open) {
+      expandedRouteHistoryIds.add(details.dataset.routeHistoryId);
+    } else {
+      expandedRouteHistoryIds.delete(details.dataset.routeHistoryId);
+    }
+  },
+  true,
+);
+
 elements.savedRouteList.addEventListener('click', (event) => {
   const loadButton = event.target.closest('[data-load-saved-route]');
   if (loadButton) {
@@ -3731,6 +3809,21 @@ elements.savedRouteList.addEventListener('click', (event) => {
   const updateButton = event.target.closest('[data-update-saved-route]');
   if (updateButton) {
     updateSavedRouteFromCurrent(updateButton.dataset.updateSavedRoute);
+    return;
+  }
+
+  const deleteHistoryButton = event.target.closest('[data-delete-route-history]');
+  if (deleteHistoryButton) {
+    removeSavedRouteHistoryEntry(
+      deleteHistoryButton.dataset.deleteRouteHistory,
+      deleteHistoryButton.dataset.historyEntryId,
+    );
+    return;
+  }
+
+  const clearHistoryButton = event.target.closest('[data-clear-route-history]');
+  if (clearHistoryButton) {
+    clearSavedRouteHistory(clearHistoryButton.dataset.clearRouteHistory);
     return;
   }
 

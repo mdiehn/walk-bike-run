@@ -373,6 +373,105 @@ test('shows and saves automatic Go mile splits', async ({ page }) => {
   ).toContainText('1 mi');
 });
 
+test('deletes and clears saved Go history records', async ({ page }) => {
+  await page.addInitScript(() => {
+    const savedRoute = {
+      schemaVersion: 1,
+      id: 'saved-history-route',
+      name: 'History route',
+      activityType: 'walk',
+      loop: false,
+      points: [
+        { id: 'history-a', name: 'Start', lat: 43, lng: -72 },
+        { id: 'history-b', name: 'Finish', lat: 43.01, lng: -72.01 },
+      ],
+      distanceMeters: 0,
+      history: [
+        {
+          schemaVersion: 1,
+          id: 'history-new',
+          routeId: 'saved-history-route',
+          routeName: 'History route',
+          activityType: 'walk',
+          distanceMeters: 1609.344,
+          elapsedSeconds: 600,
+          displayDistance: '1.00 mi',
+          displayElapsed: '10:00',
+          displayPace: '10:00 /mi',
+          splits: [],
+          startedAt: '2026-05-09T12:00:00.000Z',
+          finishedAt: '2026-05-09T12:10:00.000Z',
+        },
+        {
+          schemaVersion: 1,
+          id: 'history-old',
+          routeId: 'saved-history-route',
+          routeName: 'History route',
+          activityType: 'walk',
+          distanceMeters: 1609.344,
+          elapsedSeconds: 660,
+          displayDistance: '1.00 mi',
+          displayElapsed: '11:00',
+          displayPace: '11:00 /mi',
+          splits: [],
+          startedAt: '2026-05-08T12:00:00.000Z',
+          finishedAt: '2026-05-08T12:11:00.000Z',
+        },
+      ],
+      createdAt: '2026-05-03T12:00:00.000Z',
+      updatedAt: '2026-05-09T12:10:00.000Z',
+    };
+
+    localStorage.setItem(
+      'walk-bike-run.routeLibrary.v1',
+      JSON.stringify([savedRoute]),
+    );
+  });
+
+  await page.goto('/');
+  await openLibraryTab(page);
+
+  const savedRouteRow = page.getByTestId('saved-route-row').first();
+  await expect(savedRouteRow.getByTestId('saved-route-history')).toContainText(
+    '2 completed activities',
+  );
+  await savedRouteRow.getByText('2 completed activities').click();
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Delete this Go history entry');
+    await dialog.accept();
+  });
+  await savedRouteRow
+    .getByRole('button', { name: 'Delete this Go history entry' })
+    .first()
+    .click();
+
+  await expect(savedRouteRow.getByTestId('saved-route-history')).toContainText(
+    '1 completed activity',
+  );
+  await expect(savedRouteRow.getByTestId('saved-route-history-row')).toHaveCount(
+    1,
+  );
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Clear all 1 Go history entry');
+    await dialog.accept();
+  });
+  await savedRouteRow
+    .getByRole('button', { name: 'Clear Go history for History route' })
+    .click();
+
+  await expect(savedRouteRow.getByTestId('saved-route-history')).toHaveCount(0);
+  await expect(savedRouteRow.getByTestId('saved-route-last-followed')).toHaveText(
+    'Last followed —',
+  );
+
+  const savedLibrary = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('walk-bike-run.routeLibrary.v1')),
+  );
+  expect(savedLibrary[0].history).toEqual([]);
+});
+
 test('uses cached routed geometry on reload without routing again', async ({
   page,
 }) => {

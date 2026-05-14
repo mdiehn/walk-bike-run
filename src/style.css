@@ -1080,6 +1080,12 @@ select:focus {
   text-transform: uppercase;
 }
 
+.saved-route-history-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.35rem;
+}
+
 .saved-route-history-list {
   display: flex;
   flex-direction: column;
@@ -1098,11 +1104,34 @@ select:focus {
 }
 
 .saved-route-history-main {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  display: grid;
   gap: 0.18rem 0.5rem;
-  justify-content: space-between;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.saved-route-history-delete {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--wbr-muted);
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 900;
+  height: 1.25rem;
+  justify-content: center;
+  line-height: 1;
+  min-height: 1.25rem;
+  padding: 0;
+  width: 1.25rem;
+}
+
+.saved-route-history-delete:hover,
+.saved-route-history-delete:focus-visible {
+  background: #f9d7d7;
+  border-color: #e9b2b2;
+  color: var(--wbr-danger-dark);
 }
 
 .saved-route-history-main time {

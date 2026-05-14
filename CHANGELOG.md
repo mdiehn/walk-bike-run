@@ -19,6 +19,9 @@ Development has moved to `0.5.0-dev`. Planned focus:
 - Added a compact route-history detail area to saved routes.
   - Library rows now show the latest followed/completion stats.
   - Saved route history can expand to show completed activity rows and split chips.
+- Added saved-route Go history cleanup controls.
+  - Individual completed activity rows can be deleted.
+  - A saved route can clear all of its Go history without deleting the route.
 
 ### Changed
 
@@ -30,6 +33,7 @@ Development has moved to `0.5.0-dev`. Planned focus:
 
 ### Fixed
 
+- Fixed saved Go history details closing after deleting one entry, so follow-up cleanup actions stay visible.
 - Fixed Go follow mode so the map keeps following the moving Go marker while a session is running.
   - Starting Go enables follow mode.
   - Dragging or zooming the map disables follow mode so panning/zooming stays usable.

@@ -4,6 +4,48 @@ This file is a working-session backup. It should help recover context if VSCodiu
 
 Update it freely while working. It is allowed to be messier than `README.md` or `ROADMAP.md`.
 
+## Latest session update - Go history details expansion fix
+
+Changed:
+
+- Preserved the expanded saved-route Go history detail after deleting one history entry when more entries remain.
+- Clearing all Go history now removes that expanded-state tracking.
+- This keeps the `Clear Go history` control visible after deleting a single row and should fix the failing e2e cleanup flow.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` not run here; Mike will run e2e locally.
+
+Next recommended step:
+
+- Run `npm run test:e2e` locally.
+- Then continue with Pause/Resume/Finish control redesign.
+
+## Latest session update - Go history cleanup controls
+
+Changed:
+
+- Added an `x` delete control to each saved Go history row.
+- Added a `Clear Go history` control inside each saved route history detail area.
+- Both actions ask for confirmation before changing saved data.
+- Deleting or clearing Go history updates the route library immediately and leaves the saved route itself intact.
+- Added route-library unit coverage and an e2e flow for the cleanup controls.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` not run here; Mike will run e2e locally.
+
+Next recommended step:
+
+- Run `npm run test:e2e` locally.
+- Then continue with Pause/Resume/Finish control redesign.
+
 ## Latest session update - Go follow map fix
 
 Changed:
