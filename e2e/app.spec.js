@@ -316,6 +316,28 @@ test('shows and saves automatic Go mile splits', async ({ page }) => {
     label: '1 mi',
     distanceMeters: 1609.344,
   });
+
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await page.getByRole('tab', { name: 'Library' }).click();
+
+  const savedRouteRow = page.getByTestId('saved-route-row').first();
+  await expect(savedRouteRow.getByTestId('saved-route-last-followed')).toContainText(
+    'Last followed',
+  );
+  await expect(
+    savedRouteRow.getByTestId('saved-route-last-completion'),
+  ).toContainText('mi in');
+  await expect(savedRouteRow.getByTestId('saved-route-history')).toContainText(
+    '1 completed activity',
+  );
+
+  await savedRouteRow.getByText('1 completed activity').click();
+  await expect(savedRouteRow.getByTestId('saved-route-history-row')).toHaveCount(
+    1,
+  );
+  await expect(
+    savedRouteRow.getByTestId('saved-route-history-splits'),
+  ).toContainText('1 mi');
 });
 
 test('uses cached routed geometry on reload without routing again', async ({

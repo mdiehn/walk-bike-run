@@ -16,6 +16,9 @@ Development has moved to `0.5.0-dev`. Planned focus:
   - Splits appear in the expanded Go dashboard after each completed mile.
   - Completed Go stats now save splits into route history.
   - The completion screen shows saved splits when any were recorded.
+- Added a compact route-history detail area to saved routes.
+  - Library rows now show the latest followed/completion stats.
+  - Saved route history can expand to show completed activity rows and split chips.
 
 ### Changed
 

@@ -1063,6 +1063,78 @@ select:focus {
   width: auto;
 }
 
+.saved-route-history {
+  background: #ffffff;
+  border: 1px solid #e7ebef;
+  border-radius: calc(var(--wbr-radius) - 0.1rem);
+  color: var(--wbr-text);
+  font-size: 0.68rem;
+  padding: 0.28rem 0.36rem;
+}
+
+.saved-route-history summary {
+  color: var(--wbr-muted);
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.saved-route-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+}
+
+.saved-route-history-row {
+  border-top: 1px solid #eef1f4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-top: 0.32rem;
+}
+
+.saved-route-history-main {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.18rem 0.5rem;
+  justify-content: space-between;
+}
+
+.saved-route-history-main time {
+  color: var(--wbr-muted);
+  font-weight: 800;
+}
+
+.saved-route-history-splits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.18rem;
+}
+
+.saved-route-history-splits-label,
+.saved-route-history-split {
+  border-radius: 999px;
+  font-size: 0.6rem;
+  line-height: 1.1;
+  padding: 0.12rem 0.3rem;
+}
+
+.saved-route-history-splits-label {
+  color: var(--wbr-muted);
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.saved-route-history-split {
+  background: var(--wbr-surface-muted);
+  border: 1px solid #e3e7eb;
+}
+
 .point-list-header,
 .point-grid {
   align-items: center;

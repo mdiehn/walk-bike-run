@@ -1050,6 +1050,17 @@ function renderLibraryList() {
         ? '<span class="current-route-label">Current</span>'
         : '';
 
+      const latestHistory = getLatestRouteHistoryEntry(savedRoute);
+      const latestHistoryMeta = latestHistory
+        ? `
+            <span data-testid="saved-route-last-followed">Last followed <time datetime="${escapeAttr(latestHistory.finishedAt)}">${formatDate(latestHistory.finishedAt)}</time></span>
+            <span data-testid="saved-route-last-completion">Last completion ${formatRouteHistoryCompletion(latestHistory)}</span>
+          `
+        : `
+            <span data-testid="saved-route-last-followed">Last followed —</span>
+            <span data-testid="saved-route-last-completion">Last completion —</span>
+          `;
+
       return `
         <li class="saved-route-row ${isCurrent ? 'is-current' : ''}" data-saved-route-id="${escapeAttr(savedRoute.id)}" data-testid="saved-route-row">
           <div class="saved-route-grid">
@@ -1079,9 +1090,9 @@ function renderLibraryList() {
             <span>Created <time datetime="${escapeAttr(savedRoute.createdAt)}">${formatDate(savedRoute.createdAt)}</time></span>
             <span data-testid="saved-route-updated">Updated <time datetime="${escapeAttr(savedRoute.updatedAt)}">${formatDate(savedRoute.updatedAt)}</time></span>
             <span>${formatPointCount(savedRoute.points.length)}</span>
-            <span>Last followed —</span>
-            <span>Completion —</span>
+            ${latestHistoryMeta}
           </div>
+          ${renderSavedRouteHistory(savedRoute)}
         </li>
       `;
     })
@@ -2494,6 +2505,80 @@ function formatLibrarySortLabel() {
     librarySortDirection === 'asc' ? 'ascending' : 'descending';
 
   return `${labels[librarySortBy] ?? librarySortBy} ${directionText}`;
+}
+
+function getLatestRouteHistoryEntry(savedRoute) {
+  const history = Array.isArray(savedRoute.history) ? savedRoute.history : [];
+  return history.reduce((latest, entry) => {
+    if (!latest) return entry;
+    return new Date(entry.finishedAt) > new Date(latest.finishedAt)
+      ? entry
+      : latest;
+  }, null);
+}
+
+function renderSavedRouteHistory(savedRoute) {
+  const history = Array.isArray(savedRoute.history) ? savedRoute.history : [];
+  if (!history.length) return '';
+
+  return `
+    <details class="saved-route-history" data-testid="saved-route-history">
+      <summary>${history.length} completed ${history.length === 1 ? 'activity' : 'activities'}</summary>
+      <ol class="saved-route-history-list">
+        ${history.map(renderSavedRouteHistoryEntry).join('')}
+      </ol>
+    </details>
+  `;
+}
+
+function renderSavedRouteHistoryEntry(entry) {
+  return `
+    <li class="saved-route-history-row" data-testid="saved-route-history-row">
+      <div class="saved-route-history-main">
+        <time datetime="${escapeAttr(entry.finishedAt)}">${formatDate(entry.finishedAt)}</time>
+        <span data-testid="saved-route-history-completion">${formatRouteHistoryCompletion(entry)}</span>
+      </div>
+      ${renderSavedRouteHistorySplits(entry)}
+    </li>
+  `;
+}
+
+function renderSavedRouteHistorySplits(entry) {
+  const splits = Array.isArray(entry.splits) ? entry.splits : [];
+  if (!splits.length) return '';
+
+  return `
+    <div class="saved-route-history-splits" data-testid="saved-route-history-splits">
+      <span class="saved-route-history-splits-label">Splits</span>
+      ${splits.map(renderSavedRouteHistorySplit).join('')}
+    </div>
+  `;
+}
+
+function renderSavedRouteHistorySplit(split) {
+  const splitTime = split.displaySplit || formatGoElapsedSeconds(split.splitSeconds);
+  return `<span class="saved-route-history-split">${escapeHtml(split.label)} ${escapeHtml(splitTime)}</span>`;
+}
+
+function formatRouteHistoryCompletion(entry) {
+  const distance = entry.displayDistance || formatMiles(entry.distanceMeters);
+  const elapsed = entry.displayElapsed || formatGoElapsedSeconds(entry.elapsedSeconds);
+  const pace = formatRouteHistoryPace(entry);
+
+  return pace ? `${distance} in ${elapsed} (${pace})` : `${distance} in ${elapsed}`;
+}
+
+function formatRouteHistoryPace(entry) {
+  if (entry.displayPace) return entry.displayPace;
+  if (entry.elapsedSeconds <= 0 || entry.distanceMeters <= 0) return '';
+
+  const miles = entry.distanceMeters / METERS_PER_MILE;
+  if (entry.activityType === 'bike') {
+    const hours = entry.elapsedSeconds / 3600;
+    return `${(miles / hours).toFixed(1)} mph`;
+  }
+
+  return `${formatPaceMinutes(entry.elapsedSeconds / 60 / miles)} m/mi`;
 }
 
 function getSaveStatusText() {

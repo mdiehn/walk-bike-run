@@ -4,6 +4,26 @@ This file is a working-session backup. It should help recover context if VSCodiu
 
 Update it freely while working. It is allowed to be messier than `README.md` or `ROADMAP.md`.
 
+## Latest session update - Go history display
+
+Changed:
+
+- Library rows now show the latest Go history timestamp and completion summary instead of placeholder dashes.
+- Saved routes with history now include an expandable activity-history detail area.
+- History detail rows show completion stats and split chips when splits were saved.
+- Extended the automatic Go mile splits e2e test to check the saved-route history display.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not complete in this container because Playwright Chromium is missing at `/home/oai/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell`.
+
+Next recommended step:
+
+- Continue with the Pause/Resume/Finish control redesign.
+
 ## Latest session update - Go splits e2e toggle fix
 
 Changed:
