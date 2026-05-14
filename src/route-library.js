@@ -185,6 +185,7 @@ export function createRouteHistoryEntry(
     displayDistance: stats.distance ? String(stats.distance) : '',
     displayElapsed: stats.elapsed ? String(stats.elapsed) : '',
     displayPace: stats.pace ? String(stats.pace) : '',
+    splits: normalizeRouteSplits(stats.splits),
     startedAt: normalizeDate(stats.startedAt ?? finishedAt),
     finishedAt,
     routeSnapshot,
@@ -293,6 +294,7 @@ function normalizeRouteHistoryEntry(entry, fallbackRoute, fallbackRouteId) {
         : '',
       displayElapsed: entry.displayElapsed ? String(entry.displayElapsed) : '',
       displayPace: entry.displayPace ? String(entry.displayPace) : '',
+      splits: normalizeRouteSplits(entry.splits),
       startedAt: normalizeDate(entry.startedAt ?? finishedAt),
       finishedAt,
       routeSnapshot,
@@ -300,6 +302,42 @@ function normalizeRouteHistoryEntry(entry, fallbackRoute, fallbackRouteId) {
   } catch {
     return null;
   }
+}
+
+function normalizeRouteSplits(splits) {
+  if (!Array.isArray(splits)) return [];
+
+  return splits
+    .map((split, index) => normalizeRouteSplit(split, index))
+    .filter(Boolean);
+}
+
+function normalizeRouteSplit(split, index) {
+  if (!split || typeof split !== 'object') return null;
+
+  const splitIndex = normalizePositiveInteger(split.index, index + 1);
+  const distanceMeters = normalizeNonNegativeNumber(split.distanceMeters, 0);
+  const elapsedSeconds = normalizeNonNegativeNumber(split.elapsedSeconds, 0);
+  const splitSeconds = normalizeNonNegativeNumber(
+    split.splitSeconds,
+    elapsedSeconds,
+  );
+
+  return {
+    index: splitIndex,
+    label: split.label ? String(split.label) : String(splitIndex),
+    distanceMeters,
+    elapsedSeconds,
+    splitSeconds,
+    displayElapsed: split.displayElapsed ? String(split.displayElapsed) : '',
+    displaySplit: split.displaySplit ? String(split.displaySplit) : '',
+  };
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const numberValue = Number(value);
+  if (Number.isInteger(numberValue) && numberValue > 0) return numberValue;
+  return fallback;
 }
 
 function normalizeNonNegativeNumber(value, fallback) {

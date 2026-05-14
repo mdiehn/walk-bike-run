@@ -67,6 +67,8 @@ const GO_POSITION_SOURCE_MANUAL = 'manual';
 const GO_POSITION_SOURCE_ROUTE_START = 'route-start';
 const GO_POSITION_TICK_MS = 1000;
 const METERS_PER_MILE = 1609.344;
+const GO_SPLIT_DISTANCE_METERS = METERS_PER_MILE;
+const GO_SPLIT_UNIT_LABEL = 'mi';
 
 let routeLibrary = loadRouteLibrary();
 const persistedAppState = loadAppState();
@@ -113,6 +115,7 @@ let goPositionWatchId = null;
 let goSessionStartedAt = null;
 let goSessionStartedIso = null;
 let goAccumulatedElapsedSeconds = 0;
+let goSplits = [];
 let goElapsedTimerId = null;
 let goEstimatedBearingDegrees = null;
 let goHasMovementInput = false;
@@ -238,9 +241,11 @@ app.innerHTML = `
                 <span class="go-stat-label">Est. remaining</span>
                 <strong id="goTimeRemainingText" data-testid="go-time-remaining-text">0m</strong>
               </div>
-              <div class="go-detail-card">
+              <div class="go-detail-card go-splits-card">
                 <span class="go-stat-label">Splits</span>
-                <p>Split times can land here later.</p>
+                <div id="goSplitsList" class="go-splits-list" data-testid="go-splits-list">
+                  <p class="go-splits-empty" data-testid="go-splits-empty">No splits yet.</p>
+                </div>
               </div>
             </div>
             <div id="goActivePanel" class="go-active-panel" data-testid="go-active-panel">
@@ -274,6 +279,10 @@ app.innerHTML = `
                   <dd id="goCompletePace" data-testid="go-complete-pace">20:00 m/mi</dd>
                 </div>
               </dl>
+              <div id="goCompleteSplits" class="go-complete-splits" data-testid="go-complete-splits" hidden>
+                <h4>Splits</h4>
+                <div id="goCompleteSplitsList" class="go-splits-list" data-testid="go-complete-splits-list"></div>
+              </div>
             </div>
           </div>
         </section>
@@ -567,6 +576,7 @@ const elements = {
   goProgressBar: document.querySelector('#goProgressBar'),
   goDashboardDetails: document.querySelector('#goDashboardDetails'),
   goTimeRemainingText: document.querySelector('#goTimeRemainingText'),
+  goSplitsList: document.querySelector('#goSplitsList'),
   goActivePanel: document.querySelector('#goActivePanel'),
   goPrimaryAction: document.querySelector('#goPrimaryAction'),
   goPrimaryLabel: document.querySelector('#goPrimaryLabel'),
@@ -577,6 +587,8 @@ const elements = {
   goCompleteDistance: document.querySelector('#goCompleteDistance'),
   goCompleteElapsed: document.querySelector('#goCompleteElapsed'),
   goCompletePace: document.querySelector('#goCompletePace'),
+  goCompleteSplits: document.querySelector('#goCompleteSplits'),
+  goCompleteSplitsList: document.querySelector('#goCompleteSplitsList'),
   currentRouteTab: document.querySelector('#currentRouteTab'),
   libraryTab: document.querySelector('#libraryTab'),
   settingsTab: document.querySelector('#settingsTab'),
@@ -1361,6 +1373,10 @@ function renderGoMode() {
     getGoRemainingMinutes(progress.remainingMeters),
   );
   elements.goStatusText.textContent = getGoStatusText();
+  renderGoSplits(
+    elements.goSplitsList,
+    getCurrentGoSplits(progress.coveredMeters, elapsedSeconds),
+  );
   renderGoDashboardState();
   renderGoPositionMarker();
 
@@ -1525,6 +1541,7 @@ function resetGoSessionProgress() {
   goSessionStartedAt = null;
   goSessionStartedIso = null;
   goAccumulatedElapsedSeconds = 0;
+  goSplits = [];
   goHasMovementInput = false;
   goEstimatedBearingDegrees = null;
 }
@@ -1543,6 +1560,125 @@ function renderGoCompleteStats() {
   elements.goCompleteDistance.textContent = stats.distance;
   elements.goCompleteElapsed.textContent = stats.elapsed;
   elements.goCompletePace.textContent = stats.pace;
+  renderGoSplits(elements.goCompleteSplitsList, stats.splits ?? []);
+  elements.goCompleteSplits.hidden = !stats.splits?.length;
+}
+
+function getCurrentGoSplits(coveredMeters, elapsedSeconds) {
+  if (goSessionStatus === 'complete') {
+    return lastGoStats?.splits ?? [];
+  }
+
+  if (['running', 'paused', 'done'].includes(goSessionStatus)) {
+    return updateGoSplits(coveredMeters, elapsedSeconds);
+  }
+
+  return [];
+}
+
+function updateGoSplits(coveredMeters, elapsedSeconds) {
+  if (elapsedSeconds <= 0 || coveredMeters < GO_SPLIT_DISTANCE_METERS) {
+    return goSplits;
+  }
+
+  let nextSplitIndex = goSplits.length + 1;
+  let nextSplitDistance = nextSplitIndex * GO_SPLIT_DISTANCE_METERS;
+
+  while (coveredMeters >= nextSplitDistance) {
+    const elapsedAtSplit = getElapsedSecondsAtDistance(
+      nextSplitDistance,
+      coveredMeters,
+      elapsedSeconds,
+    );
+    const previousElapsed = goSplits.at(-1)?.elapsedSeconds ?? 0;
+
+    goSplits.push(
+      createGoSplit({
+        index: nextSplitIndex,
+        distanceMeters: nextSplitDistance,
+        elapsedSeconds: elapsedAtSplit,
+        splitSeconds: Math.max(0, elapsedAtSplit - previousElapsed),
+      }),
+    );
+
+    nextSplitIndex += 1;
+    nextSplitDistance = nextSplitIndex * GO_SPLIT_DISTANCE_METERS;
+  }
+
+  return goSplits;
+}
+
+function getGoSplitsSnapshot(coveredMeters, elapsedSeconds) {
+  const splits = ['running', 'paused', 'done'].includes(goSessionStatus)
+    ? updateGoSplits(coveredMeters, elapsedSeconds)
+    : goSplits;
+
+  return splits.map((split) => ({ ...split }));
+}
+
+function getElapsedSecondsAtDistance(
+  splitDistanceMeters,
+  coveredMeters,
+  elapsedSeconds,
+) {
+  if (coveredMeters <= 0 || elapsedSeconds <= 0) return elapsedSeconds;
+  return Math.min(
+    elapsedSeconds,
+    (splitDistanceMeters / coveredMeters) * elapsedSeconds,
+  );
+}
+
+function createGoSplit({
+  index,
+  distanceMeters,
+  elapsedSeconds,
+  splitSeconds,
+}) {
+  const label = `${index} ${GO_SPLIT_UNIT_LABEL}`;
+
+  return {
+    index,
+    label,
+    distanceMeters,
+    elapsedSeconds,
+    splitSeconds,
+    displayElapsed: formatGoElapsedSeconds(elapsedSeconds),
+    displaySplit: formatGoElapsedSeconds(splitSeconds),
+  };
+}
+
+function renderGoSplits(target, splits) {
+  target.replaceChildren();
+
+  if (!splits.length) {
+    const empty = document.createElement('p');
+    empty.className = 'go-splits-empty';
+    empty.dataset.testid = 'go-splits-empty';
+    empty.textContent = 'No splits yet.';
+    target.append(empty);
+    return;
+  }
+
+  splits.forEach((split) => {
+    const row = document.createElement('div');
+    row.className = 'go-split-row';
+    row.dataset.testid = 'go-split-row';
+
+    const label = document.createElement('span');
+    label.className = 'go-split-label';
+    label.textContent = split.label;
+
+    const splitTime = document.createElement('span');
+    splitTime.className = 'go-split-time';
+    splitTime.textContent = split.displaySplit;
+
+    const elapsedTime = document.createElement('span');
+    elapsedTime.className = 'go-split-elapsed';
+    elapsedTime.textContent = split.displayElapsed;
+
+    row.append(label, splitTime, elapsedTime);
+    target.append(row);
+  });
 }
 
 function createGoStatsSnapshot() {
@@ -1558,6 +1694,7 @@ function createGoStatsSnapshot() {
     distance: formatMiles(progress.coveredMeters),
     elapsed: formatGoElapsedSeconds(elapsedSeconds),
     pace: formatActualPace(progress.coveredMeters, elapsedSeconds),
+    splits: getGoSplitsSnapshot(progress.coveredMeters, elapsedSeconds),
     startedAt: goSessionStartedIso ?? completedAt,
     completedAt,
   };

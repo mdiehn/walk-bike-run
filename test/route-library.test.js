@@ -209,7 +209,6 @@ describe('route library', () => {
     expect(savedRoute.distanceMeters).toBe(totalDistanceMeters(route));
   });
 
-
   it('attaches completed Go history to the active saved route', () => {
     const savedRoute = createSavedRoute(
       createRoute({
@@ -237,6 +236,17 @@ describe('route library', () => {
           distance: '0.77 mi',
           elapsed: '10:00',
           pace: '12:59 /mi',
+          splits: [
+            {
+              index: 1,
+              label: '1 mi',
+              distanceMeters: 1609.344,
+              elapsedSeconds: 480,
+              splitSeconds: 480,
+              displayElapsed: '8:00',
+              displaySplit: '8:00',
+            },
+          ],
           completedAt: '2026-05-08T12:00:00.000Z',
         },
       },
@@ -253,6 +263,17 @@ describe('route library', () => {
       displayDistance: '0.77 mi',
       displayElapsed: '10:00',
       displayPace: '12:59 /mi',
+      splits: [
+        {
+          index: 1,
+          label: '1 mi',
+          distanceMeters: 1609.344,
+          elapsedSeconds: 480,
+          splitSeconds: 480,
+          displayElapsed: '8:00',
+          displaySplit: '8:00',
+        },
+      ],
       finishedAt: '2026-05-08T12:00:00.000Z',
     });
     expect(result.library[0].history[0].routeSnapshot.name).toBe(

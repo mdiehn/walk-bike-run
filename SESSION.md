@@ -4,6 +4,28 @@ This file is a working-session backup. It should help recover context if VSCodiu
 
 Update it freely while working. It is allowed to be messier than `README.md` or `ROADMAP.md`.
 
+## Latest session update - Go splits
+
+Changed:
+
+- Added first-pass automatic mile splits in Go mode.
+- The expanded Go dashboard now shows split rows instead of the old placeholder.
+- The completion panel shows splits when any were recorded.
+- Completed Go history entries now preserve split data.
+- Added unit coverage for persisted history splits and an e2e flow for split display/save behavior.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` could not complete in this container because the Playwright Chromium download failed with DNS errors, and the local system Chromium is blocked from opening localhost by policy.
+
+Next recommended step:
+
+- Run `npm run test:e2e` locally where Playwright Chromium is installed.
+- Then continue with completion/history display polish or the Pause/Resume/Finish control redesign.
+
 ## Current project state
 
 Project: Walk Bike Run

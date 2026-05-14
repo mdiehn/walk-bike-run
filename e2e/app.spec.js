@@ -94,7 +94,6 @@ test('shows first-pass Go mode controls and route-use stats', async ({
   await expect(page.getByTestId('go-progress-text')).toHaveText('0%');
 });
 
-
 test('uses a collapsed mobile Go dashboard with expandable details', async ({
   page,
 }) => {
@@ -208,7 +207,6 @@ test('uses route target pace and Go pace defaults', async ({ page }) => {
   await expect(page.getByTestId('pace-text')).toHaveText('8:15 m/mi');
 });
 
-
 test('locks route marker interactions while Go mode is active', async ({
   page,
 }) => {
@@ -259,6 +257,63 @@ test('dead-reckons Go movement when live movement input is unavailable', async (
   await expect(page.locator('.go-position-source-label')).toHaveText('est');
   await expect(page.getByTestId('go-elapsed-text')).not.toHaveText('0:00');
   await expect(page.getByTestId('go-distance-text')).not.toHaveText('0.00 mi');
+});
+
+test('shows and saves automatic Go mile splits', async ({ page }) => {
+  await page.clock.install();
+
+  const route = {
+    ...createCachedRouteFixture(),
+    targetSpeedMph: 100,
+  };
+
+  await page.addInitScript((routeFixture) => {
+    localStorage.setItem(
+      'walkBikeRun.appState',
+      JSON.stringify({
+        route: routeFixture,
+        routeDirty: false,
+        activeRouteTab: 'route',
+      }),
+    );
+  }, route);
+
+  await page.goto('/');
+  await page.getByTestId('enter-go-mode').click();
+  await page.getByTestId('go-dashboard-toggle').click();
+  await page.getByTestId('go-primary-action').click();
+
+  await page.clock.fastForward(37_000);
+
+  await expect(page.getByTestId('go-splits-list')).toContainText('1 mi');
+  await expect(page.getByTestId('go-split-row')).toHaveCount(1);
+
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Paused');
+
+  await page.getByTestId('go-primary-action').hover();
+  await page.mouse.down();
+  await page.clock.fastForward(950);
+  await page.mouse.up();
+  await expect(page.getByTestId('go-status-text')).toHaveText('Ready to save');
+
+  await page.clock.fastForward(550);
+  await page.getByTestId('go-primary-action').click();
+
+  await expect(page.getByTestId('go-complete-splits')).toBeVisible();
+  await expect(page.getByTestId('go-complete-splits-list')).toContainText(
+    '1 mi',
+  );
+
+  const savedLibrary = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('walk-bike-run.routeLibrary.v1')),
+  );
+
+  expect(savedLibrary[0].history[0].splits[0]).toMatchObject({
+    index: 1,
+    label: '1 mi',
+    distanceMeters: 1609.344,
+  });
 });
 
 test('uses cached routed geometry on reload without routing again', async ({

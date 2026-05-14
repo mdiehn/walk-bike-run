@@ -10,6 +10,13 @@ Development has moved to `0.5.0-dev`. Planned focus:
 - Mobile dashboard polish.
 - Optional movement replay/dev helper if manual testing becomes painful.
 
+### Added
+
+- Added first-pass automatic mile splits for Go sessions.
+  - Splits appear in the expanded Go dashboard after each completed mile.
+  - Completed Go stats now save splits into route history.
+  - The completion screen shows saved splits when any were recorded.
+
 ## v0.4.0 - 2026-05-13
 
 ### Added
