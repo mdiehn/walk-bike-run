@@ -28,6 +28,13 @@ Development has moved to `0.5.0-dev`. Planned focus:
   - distance, elapsed, and pace/speed
   - remaining distance, estimated remaining time, and movement/status
 
+### Fixed
+
+- Fixed Go follow mode so the map keeps following the moving Go marker while a session is running.
+  - Starting Go enables follow mode.
+  - Dragging or zooming the map disables follow mode so panning/zooming stays usable.
+  - Recenter restores follow mode.
+
 ## v0.4.0 - 2026-05-13
 
 ### Added

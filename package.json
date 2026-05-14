@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "version:sync": "node build.js --sync-version",
-    "pack:repo": "cd .. && tar --exclude='walk-bike-run/.git' --exclude='walk-bike-run/node_modules' --exclude='walk-bike-run/dist' --exclude='walk-bike-run/build' --exclude='walk-bike-run/coverage' -czf walk-bike-run.tgz walk-bike-run"
+    "pack:repo": "rm ../walk-bike-run.tar.gz && git archive --format=tar.gz --output=../walk-bike-run.tar.gz HEAD",
+    "check:all": "npm run lint && npm test && npm run build && npm run test:e2e"
   },
   "dependencies": {
     "leaflet": "^1.9.4"

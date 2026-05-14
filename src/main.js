@@ -119,6 +119,8 @@ let goSplits = [];
 let goElapsedTimerId = null;
 let goEstimatedBearingDegrees = null;
 let goHasMovementInput = false;
+let goFollowEnabled = false;
+let syncingGoFollowView = false;
 let routingRequestId = 0;
 let routePlan = createEmptyRoutePlan();
 let routingSettings = loadRoutingSettings();
@@ -651,6 +653,8 @@ function initMap() {
   });
 
   map.on('moveend zoomend', persistAppState);
+  map.on('dragstart', disableGoFollowFromMapInteraction);
+  map.on('zoomstart', disableGoFollowFromMapInteraction);
 
   elements.mapStatus.textContent = 'Ready';
 }
@@ -1509,6 +1513,7 @@ function startGoSession() {
     goSessionStartedIso = new Date().toISOString();
   }
 
+  goFollowEnabled = true;
   goSessionStatus = 'running';
   goSessionStartedAt = Date.now();
   startGoElapsedTimer();
@@ -1564,6 +1569,7 @@ function resetGoSessionProgress() {
   goSplits = [];
   goHasMovementInput = false;
   goEstimatedBearingDegrees = null;
+  goFollowEnabled = false;
 }
 
 function getGoElapsedSeconds() {
@@ -1785,14 +1791,50 @@ function clearFinishHoldTimer() {
 }
 
 function recenterGoRoute() {
-  const latLng = getGoPositionLatLng();
-  if (!latLng) {
+  const position = getGoPositionState();
+  if (!position?.latLng) {
     fitRouteToMap();
     return;
   }
 
+  goFollowEnabled = true;
+  syncGoFollowView(position, { force: true });
+}
+
+function disableGoFollowFromMapInteraction() {
+  if (activeRouteModeTab !== 'go') return;
+  if (syncingGoFollowView) return;
+  goFollowEnabled = false;
+}
+
+function syncGoFollowView(position = getGoPositionState(), options = {}) {
+  if (!shouldSyncGoFollowView(position, options)) return;
+
   const view = getGoRecenterView();
-  map.setView(getGoRecenterLatLng(latLng, view), view.zoom);
+  const targetLatLng = getGoRecenterLatLng(position.latLng, view);
+  if (!options.force && isMapAtGoFollowView(targetLatLng, view.zoom)) {
+    return;
+  }
+
+  syncingGoFollowView = true;
+  try {
+    map.setView(targetLatLng, view.zoom, { animate: false });
+  } finally {
+    syncingGoFollowView = false;
+  }
+}
+
+function shouldSyncGoFollowView(position, options = {}) {
+  if (!map || activeRouteModeTab !== 'go') return false;
+  if (!position?.latLng) return false;
+  if (options.force) return true;
+  if (!goFollowEnabled) return false;
+  return goSessionStatus === 'running';
+}
+
+function isMapAtGoFollowView(targetLatLng, zoom) {
+  if (map.getZoom() !== zoom) return false;
+  return distanceMeters(map.getCenter(), targetLatLng) < 1;
 }
 
 function getGoRecenterView() {
@@ -1975,11 +2017,13 @@ function renderGoPositionMarker() {
       icon,
       zIndexOffset: 1000,
     }).addTo(goPositionLayer);
+    syncGoFollowView(position);
     return;
   }
 
   goPositionMarker.setLatLng(position.latLng);
   goPositionMarker.setIcon(icon);
+  syncGoFollowView(position);
 }
 
 function clearGoPositionMarker() {
@@ -1987,10 +2031,6 @@ function clearGoPositionMarker() {
 
   goPositionLayer.removeLayer(goPositionMarker);
   goPositionMarker = null;
-}
-
-function getGoPositionLatLng() {
-  return getGoPositionState()?.latLng ?? null;
 }
 
 function getGoPositionState() {

@@ -4,6 +4,28 @@ This file is a working-session backup. It should help recover context if VSCodiu
 
 Update it freely while working. It is allowed to be messier than `README.md` or `ROADMAP.md`.
 
+## Latest session update - Go follow map fix
+
+Changed:
+
+- Added a persistent Go follow flag so running Go sessions keep the map centered ahead of the current/estimated marker.
+- Starting a Go session enables follow mode.
+- User map dragging and user zooming disable follow mode so panning/zooming still work.
+- Recenter now turns follow mode back on instead of only doing a one-time map move.
+- Added an e2e check that the map pane moves while estimated Go movement advances.
+
+Validation:
+
+- `npm run lint` passed.
+- `npm test` passed.
+- `npm run build` passed.
+- `npm run test:e2e` was not run here; Mike will run e2e locally.
+
+Next recommended step:
+
+- Run `npm run test:e2e` locally.
+- Manually check Go mode on mobile: start a route, watch the estimated marker move, pan/zoom the map to stop following, then tap Recenter to resume following.
+
 ## Latest session update - Go history display
 
 Changed:
@@ -18,7 +40,7 @@ Validation:
 - `npm run lint` passed.
 - `npm test` passed.
 - `npm run build` passed.
-- `npm run test:e2e` could not complete in this container because Playwright Chromium is missing at `/home/oai/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell`.
+- `npm run test:e2e` was not run here; Mike will run e2e locally.
 
 Next recommended step:
 
@@ -36,7 +58,7 @@ Validation:
 - `npm run lint` passed.
 - `npm test` passed.
 - `npm run build` passed.
-- `npm run test:e2e` could not complete in this container because Playwright Chromium is missing at `/home/oai/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell`.
+- `npm run test:e2e` was not run here; Mike will run e2e locally.
 
 Next recommended step:
 
@@ -58,7 +80,7 @@ Validation:
 - `npm run lint` passed.
 - `npm test` passed.
 - `npm run build` passed.
-- `npm run test:e2e` could not complete in this container because Playwright Chromium is missing at `/home/oai/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell`.
+- `npm run test:e2e` was not run here; Mike will run e2e locally.
 
 Next recommended step:
 

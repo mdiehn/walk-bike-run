@@ -262,6 +262,39 @@ test('dead-reckons Go movement when live movement input is unavailable', async (
   await expect(page.getByTestId('go-distance-text')).not.toHaveText('0.00 mi');
 });
 
+
+test('keeps the map following estimated Go movement', async ({ page }) => {
+  await page.clock.install();
+
+  const route = {
+    ...createCachedRouteFixture(),
+    targetSpeedMph: 100,
+  };
+
+  await page.addInitScript((routeFixture) => {
+    localStorage.setItem(
+      'walkBikeRun.appState',
+      JSON.stringify({
+        route: routeFixture,
+        routeDirty: false,
+        activeRouteTab: 'route',
+      }),
+    );
+  }, route);
+
+  await page.goto('/');
+  await page.getByTestId('enter-go-mode').click();
+  await page.getByTestId('go-primary-action').click();
+  await expect(page.locator('.go-position-source-estimated')).toBeVisible();
+
+  const firstMapPaneTransform = await getMapPaneTransform(page);
+  await page.clock.fastForward(5_000);
+
+  await expect
+    .poll(() => getMapPaneTransform(page))
+    .not.toBe(firstMapPaneTransform);
+});
+
 test('shows and saves automatic Go mile splits', async ({ page }) => {
   await page.clock.install();
 
@@ -934,6 +967,12 @@ async function savedRouteNames(page) {
   return page
     .getByTestId('saved-route-name')
     .evaluateAll((nodes) => nodes.map((node) => node.textContent));
+}
+
+async function getMapPaneTransform(page) {
+  return page
+    .locator('.leaflet-map-pane')
+    .evaluate((node) => getComputedStyle(node).transform);
 }
 
 function createRouteLibraryBackupFixture(routeName) {
